@@ -12,29 +12,31 @@ pub enum CirclePattern {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CircleKind {
-    Single,
-    Double,
+pub enum StrokePattern {
+    Line,
+    DoubleLine,
+    Chain,
 }
 
 #[derive(Debug, Clone)]
 pub struct Circle {
-    pub kind: CircleKind,
+    pub stroke: StrokePattern,
     pub pattern: CirclePattern,
     pub children: Vec<Figure>,
     pub content: Option<Box<Figure>>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LinkPattern {
-    Line,
-    Chain,
+#[derive(Debug, Clone)]
+pub struct RegularPolygon {
+    pub sides: usize,
+    pub stroke: StrokePattern,
+    pub content: Option<Box<Figure>>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Link {
     pub items: Vec<Figure>,
-    pub pattern: LinkPattern,
+    pub stroke: StrokePattern,
 }
 
 #[derive(Debug, Clone)]
@@ -57,11 +59,18 @@ pub struct Shape {
 }
 
 #[derive(Debug, Clone)]
+pub struct Symbol(pub String);
+
+#[derive(Debug, Clone)]
+pub struct Phrase(pub String);
+
+#[derive(Debug, Clone)]
 pub enum Figure {
-    Symbol(String),
-    Phrase(String),
+    Symbol(Symbol),
+    Phrase(Phrase),
     Shape(Shape),
     Circle(Circle),
+    RegularPolygon(RegularPolygon),
     Decorated(Decorated),
     Link(Link),
     Arrangement(Vec<Figure>),
@@ -84,10 +93,10 @@ impl From<ast::Manifest> for Figure {
             hat: true,
             rays: false,
             figure: Box::new(Figure::Circle(Circle {
-                kind: CircleKind::Single,
+                stroke: StrokePattern::Line,
                 pattern: value.ty.into(),
                 children: vec![],
-                content: Some(Box::new(Figure::Symbol(value.symbol))),
+                content: Some(Box::new(Figure::Symbol(Symbol(value.symbol)))),
             })),
         })
     }
@@ -96,7 +105,7 @@ impl From<ast::Manifest> for Figure {
 impl From<ast::Element> for Figure {
     fn from(value: ast::Element) -> Self {
         match value {
-            ast::Element::Phrase(phrase) => Figure::Phrase(phrase),
+            ast::Element::Phrase(phrase) => Figure::Phrase(Phrase(phrase)),
             _ => todo!("Element type not yet supported!"),
         }
     }
@@ -106,15 +115,14 @@ impl From<ast::Value> for Figure {
     fn from(value: ast::Value) -> Self {
         match value {
             ast::Value::Symbol(symbol) => Figure::Circle(Circle {
-                kind: CircleKind::Single,
+                stroke: StrokePattern::Line,
                 pattern: CirclePattern::None,
                 children: vec![],
-                content: Some(Box::new(Figure::Symbol(symbol))),
+                content: Some(Box::new(Figure::Symbol(Symbol(symbol)))),
             }),
-            ast::Value::Element(element) => Figure::Circle(Circle {
-                kind: CircleKind::Single,
-                pattern: CirclePattern::None,
-                children: vec![],
+            ast::Value::Element(element) => Figure::RegularPolygon(RegularPolygon {
+                sides: 5,
+                stroke: StrokePattern::Line,
                 content: Some(Box::new(element.into())),
             }),
             ast::Value::Spell(spell) => spell.into(),
@@ -128,7 +136,7 @@ impl From<ast::Action> for Figure {
         match value {
             ast::Action::Value(value) => value.into(),
             ast::Action::Cast(cast) => Figure::Circle(Circle {
-                kind: CircleKind::Double,
+                stroke: StrokePattern::DoubleLine,
                 pattern: CirclePattern::None,
                 children: cast.components.into_iter().map(Into::into).collect(),
                 content: Some(Box::new(Figure::Shape(Shape {
@@ -157,7 +165,7 @@ impl From<ast::Spell> for Figure {
             tilde: false,
             rays: true,
             figure: Box::new(Figure::Circle(Circle {
-                kind: CircleKind::Double,
+                stroke: StrokePattern::DoubleLine,
                 pattern: value.ty.into(),
                 children: value.components.into_iter().map(Into::into).collect(),
                 content: Some(Box::new(value.actions.into())),
@@ -170,7 +178,7 @@ impl From<ast::Binding> for Figure {
     fn from(value: ast::Binding) -> Self {
         Figure::Link(Link {
             items: vec![value.manifest.into(), value.value.into()],
-            pattern: LinkPattern::Chain,
+            stroke: StrokePattern::Chain,
         })
     }
 }

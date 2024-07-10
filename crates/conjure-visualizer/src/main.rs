@@ -1,7 +1,8 @@
 use conjure::ast::{Action, Binding, Cast, Conjuration, Element, Manifest, Spell, Type, Value};
-use visual_tree::Figure;
+use visual::Figure;
 
-mod visual_tree;
+mod layout;
+mod visual;
 
 fn main() {
     let ast = Conjuration {
