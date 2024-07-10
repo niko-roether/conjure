@@ -1,3 +1,5 @@
+use std::f64;
+
 use crate::visual;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -48,9 +50,37 @@ impl BoundingRect {
 
                 (width, height)
             }
-            _ => todo!(),
+            BoundingGeometry::RegularPolygon(polygon) => {
+                let norm_orient = polygon.orientation - orientation;
+                let num_sides_f64 = polygon.sides as f64;
+                let x_pos: Vec<_> = (0..polygon.sides)
+                    .map(|i| i as f64)
+                    .map(|i| {
+                        polygon.outer_radius
+                            * f64::cos(norm_orient + i / num_sides_f64 * f64::consts::TAU)
+                    })
+                    .collect();
+                let y_pos: Vec<_> = (0..polygon.sides)
+                    .map(|i| i as f64)
+                    .map(|i| {
+                        polygon.outer_radius
+                            * f64::sin(norm_orient + i / num_sides_f64 * f64::consts::TAU)
+                    })
+                    .collect();
+
+                let max_x = x_pos.iter().copied().reduce(f64::max).unwrap_or(0.0);
+                let min_x = x_pos.iter().copied().reduce(f64::min).unwrap_or(0.0);
+                let max_y = y_pos.iter().copied().reduce(f64::max).unwrap_or(0.0);
+                let min_y = y_pos.iter().copied().reduce(f64::min).unwrap_or(0.0);
+
+                (max_x - min_x, max_y - min_y)
+            }
         };
-        todo!()
+        Self {
+            width: inner_width + 2.0 * padding,
+            height: inner_height + 2.0 * padding,
+            orientation,
+        }
     }
 }
 
@@ -59,6 +89,51 @@ struct BoundingRegularPolygon {
     sides: usize,
     outer_radius: f64,
     orientation: f64,
+}
+
+impl BoundingRegularPolygon {
+    fn wrap_around(
+        geometry: &BoundingGeometry,
+        sides: usize,
+        orientation: f64,
+        padding: f64,
+    ) -> Self {
+        match geometry {
+            BoundingGeometry::None => Self {
+                sides,
+                outer_radius: padding,
+                orientation,
+            },
+            BoundingGeometry::Circle(circle) => {
+                let unpadded_outer_radius =
+                    circle.radius / f64::cos(f64::consts::TAU / sides as f64);
+                Self {
+                    sides,
+                    outer_radius: unpadded_outer_radius + padding,
+                    orientation,
+                }
+            }
+            BoundingGeometry::Rect(_) => {
+                // TODO: this is sub-optimal; an optimal solution is probably very difficult though
+                Self::wrap_around(
+                    &BoundingGeometry::Circle(BoundingCircle::wrap_around(geometry, 0.0)),
+                    sides,
+                    orientation,
+                    padding,
+                )
+            }
+            BoundingGeometry::RegularPolygon(_) => {
+                // TODO: like above this is sub-optimal; an optimal solution is probably even more
+                // difficult here :/
+                Self::wrap_around(
+                    &BoundingGeometry::Circle(BoundingCircle::wrap_around(geometry, 0.0)),
+                    sides,
+                    orientation,
+                    padding,
+                )
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -99,6 +174,7 @@ impl LayoutItem for visual::Symbol {
         BoundingGeometry::Rect(BoundingRect {
             width: params.base_size * params.symbol_font_size * self.0.len() as f64,
             height: params.base_size * params.symbol_line_height,
+            orientation: 0.0,
         })
     }
 }
@@ -108,6 +184,7 @@ impl LayoutItem for visual::Phrase {
         BoundingGeometry::Rect(BoundingRect {
             width: params.base_size * params.phrase_font_size * (self.0.len() + 2) as f64,
             height: params.base_size * params.phrase_line_height,
+            orientation: 0.0,
         })
     }
 }
