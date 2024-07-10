@@ -41,6 +41,7 @@ pub struct Link {
 pub struct Decorated {
     pub tilde: bool,
     pub hat: bool,
+    pub rays: bool,
     pub figure: Box<Figure>,
 }
 
@@ -81,6 +82,7 @@ impl From<ast::Manifest> for Figure {
         Figure::Decorated(Decorated {
             tilde: false,
             hat: true,
+            rays: false,
             figure: Box::new(Figure::Circle(Circle {
                 kind: CircleKind::Single,
                 pattern: value.ty.into(),
@@ -150,11 +152,16 @@ impl From<ast::ActionSequence> for Figure {
 
 impl From<ast::Spell> for Figure {
     fn from(value: ast::Spell) -> Self {
-        Figure::Circle(Circle {
-            kind: CircleKind::Double,
-            pattern: value.ty.into(),
-            children: value.components.into_iter().map(Into::into).collect(),
-            content: Some(Box::new(value.actions.into())),
+        Figure::Decorated(Decorated {
+            hat: false,
+            tilde: false,
+            rays: true,
+            figure: Box::new(Figure::Circle(Circle {
+                kind: CircleKind::Double,
+                pattern: value.ty.into(),
+                children: value.components.into_iter().map(Into::into).collect(),
+                content: Some(Box::new(value.actions.into())),
+            })),
         })
     }
 }
