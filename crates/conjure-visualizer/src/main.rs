@@ -1,4 +1,7 @@
 use conjure::ast::{Action, Binding, Cast, Conjuration, Element, Manifest, Spell, Type, Value};
+use visual_tree::Figure;
+
+mod visual_tree;
 
 fn main() {
     let ast = Conjuration {
@@ -15,9 +18,11 @@ fn main() {
                         "Hello World!".to_string(),
                     )))],
                 })],
+                ty: Type::Nil,
             }),
         }],
     };
 
-    dbg!(ast);
+    dbg!(&ast);
+    dbg!(Figure::from(ast));
 }

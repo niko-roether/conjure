@@ -4,7 +4,6 @@
 /// All simple types have associated elements (literals).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SimpleType {
-    Nil,
     Truth,
     NaturalCount,
     WholeCount,
@@ -36,6 +35,8 @@ pub type ConjoinedType = Vec<Type>;
 #[derive(Debug, Clone)]
 pub enum Type {
     Inferred,
+    Nil,
+    Optional(Box<Type>),
     Symbol(Symbol),
     Simple(SimpleType),
     Conjoined(ConjoinedType),
@@ -93,6 +94,7 @@ pub struct Binding {
 pub struct Boundary {
     pub bindings: Vec<Binding>,
     pub value: Box<Value>,
+    pub ty: Type,
 }
 
 /// A pure function. Consists of a list of [`Manifest`]s (declarations) for its components
@@ -121,7 +123,7 @@ pub struct Cast {
 }
 
 /// A sequence of [`Action`]s (imperative statements).
-type ActionSequence = Vec<Action>;
+pub type ActionSequence = Vec<Action>;
 
 /// An imperative function. Consists of a list of [`Manifest`]s (declarations) for its components
 /// (parameters), and an [`ActionSequence`] (list of statements).
@@ -129,6 +131,7 @@ type ActionSequence = Vec<Action>;
 pub struct Spell {
     pub components: Vec<Manifest>,
     pub actions: ActionSequence,
+    pub ty: Type,
 }
 
 #[derive(Debug, Clone)]
