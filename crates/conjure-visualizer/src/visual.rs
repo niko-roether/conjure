@@ -39,22 +39,27 @@ pub struct Link {
     pub stroke: StrokePattern,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DecorationKind {
+    Tilde,
+    Hat,
+    Rays,
+}
+
 #[derive(Debug, Clone)]
 pub struct Decorated {
-    pub tilde: bool,
-    pub hat: bool,
-    pub rays: bool,
-    pub figure: Box<Figure>,
+    pub kind: DecorationKind,
+    pub content: Box<Figure>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ShapeKind {
-    Star,
+pub enum SpecialShapeKind {
+    Pentagram,
 }
 
 #[derive(Debug, Clone)]
-pub struct Shape {
-    pub kind: ShapeKind,
+pub struct SpecialShape {
+    pub kind: SpecialShapeKind,
     pub content: Option<Box<Figure>>,
 }
 
@@ -68,7 +73,7 @@ pub struct Phrase(pub String);
 pub enum Figure {
     Symbol(Symbol),
     Phrase(Phrase),
-    Shape(Shape),
+    SpecialShape(SpecialShape),
     Circle(Circle),
     RegularPolygon(RegularPolygon),
     Decorated(Decorated),
@@ -89,10 +94,8 @@ impl From<ast::Type> for CirclePattern {
 impl From<ast::Manifest> for Figure {
     fn from(value: ast::Manifest) -> Self {
         Figure::Decorated(Decorated {
-            tilde: false,
-            hat: true,
-            rays: false,
-            figure: Box::new(Figure::Circle(Circle {
+            kind: DecorationKind::Hat,
+            content: Box::new(Figure::Circle(Circle {
                 stroke: StrokePattern::Line,
                 pattern: value.ty.into(),
                 children: vec![],
@@ -139,8 +142,8 @@ impl From<ast::Action> for Figure {
                 stroke: StrokePattern::DoubleLine,
                 pattern: CirclePattern::None,
                 children: cast.components.into_iter().map(Into::into).collect(),
-                content: Some(Box::new(Figure::Shape(Shape {
-                    kind: ShapeKind::Star,
+                content: Some(Box::new(Figure::SpecialShape(SpecialShape {
+                    kind: SpecialShapeKind::Pentagram,
                     content: Some(Box::new((*cast.spell).into())),
                 }))),
             }),
@@ -161,10 +164,8 @@ impl From<ast::ActionSequence> for Figure {
 impl From<ast::Spell> for Figure {
     fn from(value: ast::Spell) -> Self {
         Figure::Decorated(Decorated {
-            hat: false,
-            tilde: false,
-            rays: true,
-            figure: Box::new(Figure::Circle(Circle {
+            kind: DecorationKind::Rays,
+            content: Box::new(Figure::Circle(Circle {
                 stroke: StrokePattern::DoubleLine,
                 pattern: value.ty.into(),
                 children: value.components.into_iter().map(Into::into).collect(),
