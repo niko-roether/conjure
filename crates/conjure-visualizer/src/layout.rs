@@ -6,6 +6,14 @@ pub struct SymbolData {
     pub name: String,
 }
 
+pub struct PhraseData {
+    pub text: String,
+}
+
+pub struct SpecialShapeData {
+    pub kind: visual::SpecialShapeKind,
+}
+
 pub struct CircleData {
     pub stroke: visual::StrokePattern,
     pub pattern: visual::CirclePattern,
@@ -14,6 +22,10 @@ pub struct CircleData {
 pub struct RegularPolygonData {
     pub sides: usize,
     pub stroke: visual::StrokePattern,
+}
+
+pub struct DecoratedData {
+    pub kind: visual::DecorationKind,
 }
 
 pub struct LinkData {
