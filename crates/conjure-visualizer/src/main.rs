@@ -1,8 +1,9 @@
+use std::f64;
+
+use bounding::ShapeMut;
 // use conjure::ast::{Action, Binding, Cast, Conjuration, Element, Manifest, Spell, Type, Value};
 use nalgebra::vector;
 // use visual::Figure;
-
-use bounding::ShapeOps;
 
 mod bounding;
 mod layout;
@@ -31,10 +32,10 @@ fn main() {
     // dbg!(&ast);
     // dbg!(Figure::from(ast));
     //
-    let mut weird_rect =
-        bounding::Polygon::new_rect(vector![-1.0, -1.0], vector![2.0, 1.0]).unwrap();
+    let mut weird_rect = bounding::Rect::from_width_height(2.0, 1.0);
+    weird_rect.set_center(vector![-0.5, 0.0]);
     weird_rect.rotate(-1.2);
-    let polygon = weird_rect.containing_regular_polygon(5, 0.4, 0.0);
+    let polygon = bounding::RegularPolygon::<5>::wrap(&weird_rect, 0.8, 0.0);
     dbg!(weird_rect);
     dbg!(polygon);
 }
