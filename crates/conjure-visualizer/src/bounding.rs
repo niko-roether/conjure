@@ -1,6 +1,6 @@
 use std::{f64, ops::Range};
 
-use nalgebra::{vector, Isometry2, Rotation2, Vector2};
+use nalgebra::{vector, Rotation2, Vector2};
 
 pub trait OuterShape {
     fn outer_coords_range(&self) -> (Range<f64>, Range<f64>);
@@ -43,7 +43,8 @@ impl<V> PolygonSides<V> {
 
     fn get_vector_for(from: Vector2<f64>, to: Vector2<f64>) -> Vector2<f64> {
         let diff = to - from;
-        from + (from.magnitude_squared() - from.dot(&to)) / diff.magnitude_squared() * diff
+        let factor = (from.magnitude_squared() - from.dot(&to)) / diff.magnitude_squared();
+        from + factor * diff
     }
 }
 
@@ -56,13 +57,12 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let Some(vertex) = self.vertices.next() else {
-                return Some(Self::get_vector_for(self.first.take()?, self.prev.take()?));
+                return Some(Self::get_vector_for(self.prev.take()?, self.first.take()?));
             };
             self.first.get_or_insert(vertex);
-            if let Some(prev) = self.prev {
+            if let Some(prev) = self.prev.replace(vertex) {
                 return Some(Self::get_vector_for(prev, vertex));
             }
-            self.prev.replace(vertex);
         }
     }
 }
@@ -148,6 +148,10 @@ impl Circle {
 
     pub fn wrap(shape: impl OuterShape, padding: f64) -> Self {
         Self::from_radius(shape.outer_radius() + padding)
+    }
+
+    pub fn fill(shape: &impl InnerShape, padding: f64) -> Self {
+        Self::from_radius(f64::max(0.0, shape.inner_radius() - padding))
     }
 
     #[inline]
@@ -305,9 +309,8 @@ impl Iterator for RectVertices {
             _ => return None,
         };
         self.idx += 1;
-        let vertex = self.rotation
-            * (vector![s_x * self.half_width, s_y * self.half_height] - self.offset)
-            + self.offset;
+        let vertex =
+            self.rotation * vector![s_x * self.half_width, s_y * self.half_height] + self.offset;
         Some(dbg!(vertex))
     }
 }
@@ -361,7 +364,7 @@ impl<const N: usize> RegularPolygon<N> {
             })
             .reduce(f64::max)
             .unwrap_or_default();
-        let inner_radius = dbg!(unpadded_inner_radius) + padding;
+        let inner_radius = unpadded_inner_radius + padding;
         let outer_radius = inner_radius / f64::cos(segment_angle / 2.0);
         Self::new(outer_radius, rotation)
     }
