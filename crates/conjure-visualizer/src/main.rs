@@ -2,7 +2,7 @@
 use nalgebra::vector;
 // use visual::Figure;
 
-use bounding::Shape;
+use bounding::ShapeOps;
 
 mod bounding;
 mod layout;

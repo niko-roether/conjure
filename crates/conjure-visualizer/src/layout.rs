@@ -2,46 +2,44 @@ use nalgebra::Vector2;
 
 use crate::{bounding, visual};
 
-pub struct SymbolData {
+pub struct SymbolItem {
     pub name: String,
 }
 
-pub struct PhraseData {
+pub struct PhraseItem {
     pub text: String,
 }
 
-pub struct SpecialShapeData {
+pub struct SpecialShapeItem {
     pub kind: visual::SpecialShapeKind,
 }
 
-pub struct CircleData {
+pub struct CircleItem {
     pub stroke: visual::StrokePattern,
     pub pattern: visual::CirclePattern,
 }
 
-pub struct RegularPolygonData {
+pub struct RegularPolygonItem {
     pub sides: usize,
     pub stroke: visual::StrokePattern,
 }
 
-pub struct DecoratedData {
+pub struct DecoratedItem {
     pub kind: visual::DecorationKind,
 }
 
-pub struct LinkData {
+pub struct LinkItem {
     pub stroke: visual::StrokePattern,
 }
 
-pub enum NodeData {
-    Circle(CircleData),
-    RegularPolygon(RegularPolygonData),
-    Link(LinkData),
+pub enum LayoutItem {
+    Circle(CircleItem),
+    RegularPolygon(RegularPolygonItem),
+    Link(LinkItem),
 }
 
 pub struct Node {
-    pub data: NodeData,
-    pub boundary: Box<dyn bounding::Shape>,
-    pub scale: f64,
+    pub item: LayoutItem,
     pub children: Vec<NodeChild>,
 }
 
@@ -51,6 +49,8 @@ pub struct NodeChild {
     pub rotation: f64,
 }
 
-pub fn compute_layout(visual: visual::Figure) -> Node {
-    todo!()
+impl From<visual::Symbol> for Node {
+    fn from(value: visual::Symbol) -> Self {
+        todo!()
+    }
 }
