@@ -256,6 +256,32 @@ impl Rect {
         Self::from_width_height_rotation(width + 2.0 * padding, height + 2.0 * padding, rotation)
     }
 
+    pub fn fill(shape: &impl InnerShape, padding: f64) -> Self {
+        let (x_range, y_range) = shape.inner_coords_range();
+        let width = 2.0 * f64::min(x_range.start.abs(), x_range.end.abs());
+        let height = 2.0 * f64::min(y_range.start.abs(), y_range.end.abs());
+        Self::from_width_height(
+            f64::max(0.0, width - 2.0 * padding),
+            f64::max(0.0, height - 2.0 * padding),
+        )
+    }
+
+    pub fn fill_rotated(shape: &impl InnerShape, rotation: f64, padding: f64) -> Self {
+        let width = f64::min(
+            shape.inner_radius_at(rotation),
+            shape.inner_radius_at(rotation + f64::consts::TAU * 0.5),
+        );
+        let height = f64::min(
+            shape.inner_radius_at(rotation + f64::consts::TAU * 0.25),
+            shape.inner_radius_at(rotation + f64::consts::TAU * 0.74),
+        );
+        Self::from_width_height_rotation(
+            f64::max(0.0, width - 2.0 * padding),
+            f64::max(0.0, height - 2.0 * padding),
+            rotation,
+        )
+    }
+
     #[inline]
     pub fn width(&self) -> f64 {
         self.width
@@ -367,6 +393,15 @@ impl<const N: usize> RegularPolygon<N> {
         let inner_radius = unpadded_inner_radius + padding;
         let outer_radius = inner_radius / f64::cos(segment_angle / 2.0);
         Self::new(outer_radius, rotation)
+    }
+
+    pub fn fill(shape: &impl InnerShape, rotation: f64, padding: f64) -> Self {
+        let segment_angle = f64::consts::TAU / (N as f64);
+        let unpadded_outer_radius = (0..N)
+            .map(|i| dbg!(shape.inner_radius_at(rotation + (i as f64) * segment_angle)))
+            .reduce(f64::min)
+            .unwrap_or_default();
+        Self::new(unpadded_outer_radius + padding, rotation)
     }
 
     #[inline]
