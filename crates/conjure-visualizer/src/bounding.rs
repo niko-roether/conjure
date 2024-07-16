@@ -311,7 +311,7 @@ impl Iterator for RectVertices {
         self.idx += 1;
         let vertex =
             self.rotation * vector![s_x * self.half_width, s_y * self.half_height] + self.offset;
-        Some(dbg!(vertex))
+        Some(vertex)
     }
 }
 
