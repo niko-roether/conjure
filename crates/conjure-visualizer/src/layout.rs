@@ -26,7 +26,7 @@ pub struct LayoutParams<'a> {
 
 pub struct Symbol {
     pub name: String,
-    pub boundary: bounding::Rect,
+    pub boundary: Vec<bounding::Rect>,
 }
 
 impl Symbol {
@@ -40,32 +40,32 @@ impl Symbol {
 }
 
 impl LayoutNode for Symbol {
-    type Boundary = bounding::Rect;
+    type Boundary = Vec<bounding::Rect>;
 
     fn boundary(&self) -> Self::Boundary {
         self.boundary.clone()
     }
 
     fn scale(&mut self, factor: f64) {
-        self.boundary.scale(factor);
+        self.boundary.iter_mut().for_each(|b| b.scale(factor));
     }
 
     fn rotate(&mut self, angle: f64) {
-        self.boundary.rotate(angle);
+        self.boundary.iter_mut().for_each(|b| b.rotate(angle));
     }
 
     fn translate(&mut self, amount: Vector2<f64>) {
-        self.boundary.translate(amount);
+        self.boundary.iter_mut().for_each(|b| b.translate(amount));
     }
 }
 
 pub struct Phrase {
     pub text: String,
-    pub boundary: bounding::Rect,
+    pub boundary: Vec<bounding::Rect>,
 }
 
 impl Phrase {
-    fn construct(params: &LayoutParams, phrase: visual::Symbol) -> Self {
+    fn construct(params: &LayoutParams, phrase: visual::Phrase) -> Self {
         let boundary = params.font.measure(&phrase.0, params.phrase_font_size);
         Self {
             text: phrase.0,
@@ -75,22 +75,22 @@ impl Phrase {
 }
 
 impl LayoutNode for Phrase {
-    type Boundary = bounding::Rect;
+    type Boundary = Vec<bounding::Rect>;
 
     fn boundary(&self) -> Self::Boundary {
         self.boundary.clone()
     }
 
     fn scale(&mut self, factor: f64) {
-        self.boundary.scale(factor);
+        self.boundary.iter_mut().for_each(|b| b.scale(factor));
     }
 
     fn rotate(&mut self, angle: f64) {
-        self.boundary.rotate(angle);
+        self.boundary.iter_mut().for_each(|b| b.rotate(angle));
     }
 
     fn translate(&mut self, amount: Vector2<f64>) {
-        self.boundary.translate(amount);
+        self.boundary.iter_mut().for_each(|b| b.translate(amount))
     }
 }
 
