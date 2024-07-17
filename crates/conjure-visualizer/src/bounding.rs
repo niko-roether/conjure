@@ -465,3 +465,42 @@ impl<const N: usize> ShapeMut for RegularPolygon<N> {
         self.offset *= factor;
     }
 }
+
+impl OuterShape for [&dyn OuterShape] {
+    fn outer_coords_range(&self) -> (Range<f64>, Range<f64>) {
+        let mut x_range = 0.0..0.0;
+        let mut y_range = 0.0..0.0;
+        for shape in self {
+            let (shape_x_range, shape_y_range) = shape.outer_coords_range();
+            x_range = f64::min(x_range.start, shape_x_range.start)
+                ..f64::max(x_range.end, shape_x_range.end);
+            y_range = f64::min(y_range.start, shape_y_range.start)
+                ..f64::max(y_range.end, shape_y_range.end);
+        }
+        (x_range, y_range)
+    }
+
+    fn outer_radius(&self) -> f64 {
+        self.iter().map(|s| s.outer_radius()).fold(0.0, f64::max)
+    }
+
+    fn outer_radius_at(&self, angle: f64) -> f64 {
+        self.iter()
+            .map(|s| s.outer_radius_at(angle))
+            .fold(0.0, f64::max)
+    }
+}
+
+impl ShapeMut for [&mut dyn ShapeMut] {
+    fn scale(&mut self, factor: f64) {
+        self.iter_mut().for_each(|s| s.scale(factor));
+    }
+
+    fn rotate(&mut self, angle: f64) {
+        self.iter_mut().for_each(|s| s.rotate(angle));
+    }
+
+    fn set_center(&mut self, center: Vector2<f64>) {
+        self.iter_mut().for_each(|s| s.set_center(center));
+    }
+}
