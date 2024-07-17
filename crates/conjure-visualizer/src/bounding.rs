@@ -19,11 +19,61 @@ pub trait InnerShape {
 }
 
 pub trait ShapeMut {
-    fn set_center(&mut self, center: Vector2<f64>);
+    fn translate(&mut self, amount: Vector2<f64>);
 
     fn rotate(&mut self, angle: f64);
 
     fn scale(&mut self, factor: f64);
+}
+fn vector_to_line(from: Vector2<f64>, to: Vector2<f64>) -> Vector2<f64> {
+    let diff = to - from;
+    let factor = (from.magnitude_squared() - from.dot(&to)) / diff.magnitude_squared();
+    from + factor * diff
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Line {
+    pub start: Vector2<f64>,
+    pub end: Vector2<f64>,
+}
+
+impl OuterShape for Line {
+    fn outer_coords_range(&self) -> (Range<f64>, Range<f64>) {
+        (
+            f64::min(self.start.x, self.end.x)..f64::max(self.start.x, self.end.x),
+            f64::min(self.start.y, self.end.y)..f64::min(self.start.y, self.end.y),
+        )
+    }
+
+    fn outer_radius(&self) -> f64 {
+        f64::max(self.start.magnitude_squared(), self.end.magnitude_squared()).sqrt()
+    }
+
+    fn outer_radius_at(&self, _angle: f64) -> f64 {
+        f64::max(
+            0.0,
+            vector_to_line(self.start, self.end).magnitude_squared(),
+        )
+        .sqrt()
+    }
+}
+
+impl ShapeMut for Line {
+    fn scale(&mut self, factor: f64) {
+        self.start *= factor;
+        self.end *= factor;
+    }
+
+    fn rotate(&mut self, angle: f64) {
+        let rotation = Rotation2::new(angle);
+        self.start = rotation * self.start;
+        self.end = rotation * self.end;
+    }
+
+    fn translate(&mut self, amount: Vector2<f64>) {
+        self.start += amount;
+        self.end += amount;
+    }
 }
 
 pub struct PolygonSides<V> {
@@ -40,12 +90,6 @@ impl<V> PolygonSides<V> {
             vertices,
         }
     }
-
-    fn get_vector_for(from: Vector2<f64>, to: Vector2<f64>) -> Vector2<f64> {
-        let diff = to - from;
-        let factor = (from.magnitude_squared() - from.dot(&to)) / diff.magnitude_squared();
-        from + factor * diff
-    }
 }
 
 impl<V> Iterator for PolygonSides<V>
@@ -57,11 +101,11 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let Some(vertex) = self.vertices.next() else {
-                return Some(Self::get_vector_for(self.prev.take()?, self.first.take()?));
+                return Some(vector_to_line(self.prev.take()?, self.first.take()?));
             };
             self.first.get_or_insert(vertex);
             if let Some(prev) = self.prev.replace(vertex) {
-                return Some(Self::get_vector_for(prev, vertex));
+                return Some(vector_to_line(prev, vertex));
             }
         }
     }
@@ -197,8 +241,8 @@ impl InnerShape for Circle {
 }
 
 impl ShapeMut for Circle {
-    fn set_center(&mut self, center: Vector2<f64>) {
-        self.offset = -center;
+    fn translate(&mut self, amount: Vector2<f64>) {
+        self.offset += amount;
     }
 
     fn rotate(&mut self, angle: f64) {
@@ -350,8 +394,8 @@ impl Polygon for Rect {
 }
 
 impl ShapeMut for Rect {
-    fn set_center(&mut self, center: Vector2<f64>) {
-        self.offset = -center;
+    fn translate(&mut self, amount: Vector2<f64>) {
+        self.offset += amount;
     }
 
     fn rotate(&mut self, angle: f64) {
@@ -367,24 +411,26 @@ impl ShapeMut for Rect {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct RegularPolygon<const N: usize> {
+pub struct RegularPolygon {
+    num_sides: usize,
     outer_radius: f64,
     rotation: f64,
     offset: Vector2<f64>,
 }
 
-impl<const N: usize> RegularPolygon<N> {
-    pub fn new(outer_radius: f64, rotation: f64) -> Self {
+impl RegularPolygon {
+    pub fn new(num_sides: usize, outer_radius: f64, rotation: f64) -> Self {
         Self {
+            num_sides,
             outer_radius,
             rotation,
             offset: vector![0.0, 0.0],
         }
     }
 
-    pub fn wrap(shape: &impl OuterShape, rotation: f64, padding: f64) -> Self {
-        let segment_angle = f64::consts::TAU / (N as f64);
-        let unpadded_inner_radius = (0..N)
+    pub fn wrap(shape: &impl OuterShape, num_sides: usize, rotation: f64, padding: f64) -> Self {
+        let segment_angle = f64::consts::TAU / (num_sides as f64);
+        let unpadded_inner_radius = (0..num_sides)
             .map(|i| {
                 shape.outer_radius_at(rotation + segment_angle / 2.0 + (i as f64) * segment_angle)
             })
@@ -392,16 +438,21 @@ impl<const N: usize> RegularPolygon<N> {
             .unwrap_or_default();
         let inner_radius = unpadded_inner_radius + padding;
         let outer_radius = inner_radius / f64::cos(segment_angle / 2.0);
-        Self::new(outer_radius, rotation)
+        Self::new(num_sides, outer_radius, rotation)
     }
 
-    pub fn fill(shape: &impl InnerShape, rotation: f64, padding: f64) -> Self {
-        let segment_angle = f64::consts::TAU / (N as f64);
-        let unpadded_outer_radius = (0..N)
+    pub fn fill(shape: &impl InnerShape, num_sides: usize, rotation: f64, padding: f64) -> Self {
+        let segment_angle = f64::consts::TAU / (num_sides as f64);
+        let unpadded_outer_radius = (0..num_sides)
             .map(|i| dbg!(shape.inner_radius_at(rotation + (i as f64) * segment_angle)))
             .reduce(f64::min)
             .unwrap_or_default();
-        Self::new(unpadded_outer_radius + padding, rotation)
+        Self::new(num_sides, unpadded_outer_radius + padding, rotation)
+    }
+
+    #[inline]
+    pub fn num_sides(&self) -> usize {
+        self.num_sides
     }
 
     #[inline]
@@ -422,11 +473,11 @@ pub struct RegularPolygonVertices {
 }
 
 impl RegularPolygonVertices {
-    fn new<const N: usize>(polygon: &RegularPolygon<N>) -> Self {
+    fn new(polygon: &RegularPolygon) -> Self {
         Self {
             outer_radius: polygon.outer_radius,
-            base_angle: f64::consts::TAU / (N as f64),
-            idx_iter: 0..N,
+            base_angle: f64::consts::TAU / (polygon.num_sides as f64),
+            idx_iter: 0..polygon.num_sides,
         }
     }
 }
@@ -442,7 +493,7 @@ impl Iterator for RegularPolygonVertices {
     }
 }
 
-impl<const N: usize> Polygon for RegularPolygon<N> {
+impl Polygon for RegularPolygon {
     type Vertices = RegularPolygonVertices;
 
     fn vertices(&self) -> Self::Vertices {
@@ -450,9 +501,9 @@ impl<const N: usize> Polygon for RegularPolygon<N> {
     }
 }
 
-impl<const N: usize> ShapeMut for RegularPolygon<N> {
-    fn set_center(&mut self, center: Vector2<f64>) {
-        self.offset = -center;
+impl ShapeMut for RegularPolygon {
+    fn translate(&mut self, amount: Vector2<f64>) {
+        self.offset += amount;
     }
 
     fn rotate(&mut self, angle: f64) {
@@ -466,7 +517,21 @@ impl<const N: usize> ShapeMut for RegularPolygon<N> {
     }
 }
 
-impl OuterShape for [&dyn OuterShape] {
+impl OuterShape for Box<dyn OuterShape> {
+    fn outer_coords_range(&self) -> (Range<f64>, Range<f64>) {
+        self.outer_coords_range()
+    }
+
+    fn outer_radius(&self) -> f64 {
+        self.outer_radius()
+    }
+
+    fn outer_radius_at(&self, angle: f64) -> f64 {
+        self.outer_radius_at(angle)
+    }
+}
+
+impl<S: OuterShape> OuterShape for Vec<S> {
     fn outer_coords_range(&self) -> (Range<f64>, Range<f64>) {
         let mut x_range = 0.0..0.0;
         let mut y_range = 0.0..0.0;
@@ -488,19 +553,5 @@ impl OuterShape for [&dyn OuterShape] {
         self.iter()
             .map(|s| s.outer_radius_at(angle))
             .fold(0.0, f64::max)
-    }
-}
-
-impl ShapeMut for [&mut dyn ShapeMut] {
-    fn scale(&mut self, factor: f64) {
-        self.iter_mut().for_each(|s| s.scale(factor));
-    }
-
-    fn rotate(&mut self, angle: f64) {
-        self.iter_mut().for_each(|s| s.rotate(angle));
-    }
-
-    fn set_center(&mut self, center: Vector2<f64>) {
-        self.iter_mut().for_each(|s| s.set_center(center));
     }
 }

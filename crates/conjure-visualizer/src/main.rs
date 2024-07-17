@@ -44,7 +44,7 @@ fn main() {
     // dbg!(&filling_circle);
 
     let rect = bounding::Rect::from_width_height(1.0, 1.0);
-    let triangle = bounding::RegularPolygon::<3>::fill(&rect, 0.3, 0.0);
+    let triangle = bounding::RegularPolygon::fill(&rect, 3, 0.3, 0.0);
     dbg!(&rect);
     dbg!(&triangle);
 }
