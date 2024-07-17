@@ -1,6 +1,3 @@
-use std::f64;
-
-use bounding::ShapeMut;
 mod bounding;
 mod font;
 mod layout;
