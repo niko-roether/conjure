@@ -58,8 +58,7 @@ pub enum SpecialShapeKind {
 }
 
 #[derive(Debug, Clone)]
-pub struct SpecialShape {
-    pub kind: SpecialShapeKind,
+pub struct Pentagram {
     pub content: Option<Box<Figure>>,
 }
 
@@ -73,7 +72,7 @@ pub struct Phrase(pub String);
 pub enum Figure {
     Symbol(Symbol),
     Phrase(Phrase),
-    SpecialShape(SpecialShape),
+    Pentagram(Pentagram),
     Circle(Circle),
     RegularPolygon(RegularPolygon),
     Decorated(Decorated),
@@ -142,8 +141,7 @@ impl From<ast::Action> for Figure {
                 stroke: StrokePattern::DoubleLine,
                 pattern: CirclePattern::None,
                 children: cast.components.into_iter().map(Into::into).collect(),
-                content: Some(Box::new(Figure::SpecialShape(SpecialShape {
-                    kind: SpecialShapeKind::Pentagram,
+                content: Some(Box::new(Figure::Pentagram(Pentagram {
                     content: Some(Box::new((*cast.spell).into())),
                 }))),
             }),
