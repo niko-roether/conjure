@@ -1,3 +1,5 @@
+use std::f64;
+
 use nalgebra::Vector2;
 
 use crate::{
@@ -20,6 +22,7 @@ trait LayoutNode {
 
 pub struct LayoutParams<'a> {
     pub font: &'a Font,
+    pub padding: f64,
     pub phrase_font_size: f32,
     pub symbol_font_size: f32,
 }
@@ -97,6 +100,42 @@ impl LayoutNode for Phrase {
 pub struct Pentagram {
     pub boundary: bounding::RegularPolygon,
     pub child: Option<Box<Node>>,
+}
+
+impl Pentagram {
+    const INNER_ROTATION: f64 = 0.25 * f64::consts::TAU;
+    const OUTER_ROTATION: f64 = -0.25 * f64::consts::TAU;
+    const INNER_OUTER_RADIUS_RATIO: f64 = 2.618033988749895;
+
+    fn construct(params: &LayoutParams, pentagram: visual::Pentagram) -> Self {
+        let inner_pentagon;
+        let child;
+        match pentagram.content {
+            Some(content_figure) => {
+                let content = Node::construct(params, *content_figure);
+                inner_pentagon = bounding::RegularPolygon::wrap(
+                    &content.boundary(),
+                    5,
+                    Self::INNER_ROTATION,
+                    params.padding,
+                );
+                child = Some(Box::new(content));
+            }
+            None => {
+                inner_pentagon =
+                    bounding::RegularPolygon::new(5, params.padding, Self::INNER_ROTATION);
+                child = None;
+            }
+        }
+
+        let boundary = bounding::RegularPolygon::new(
+            5,
+            Self::INNER_OUTER_RADIUS_RATIO * inner_pentagon.outer_radius(),
+            Self::OUTER_ROTATION,
+        );
+
+        Self { boundary, child }
+    }
 }
 
 impl LayoutNode for Pentagram {
@@ -283,6 +322,12 @@ pub enum Node {
     RegularPolygon(RegularPolygon),
     Link(Link),
     Arrangement(Vec<Node>),
+}
+
+impl Node {
+    fn construct(params: &LayoutParams, figure: visual::Figure) -> Self {
+        todo!()
+    }
 }
 
 impl LayoutNode for Node {
