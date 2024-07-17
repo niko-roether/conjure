@@ -2,6 +2,7 @@ use nalgebra::Vector2;
 
 use crate::{
     bounding::{self, OuterShape, ShapeMut},
+    font::Font,
     visual,
 };
 
@@ -17,9 +18,25 @@ trait LayoutNode {
     fn translate(&mut self, amount: Vector2<f64>);
 }
 
+pub struct LayoutParams<'a> {
+    pub font: &'a Font,
+    pub phrase_font_size: f32,
+    pub symbol_font_size: f32,
+}
+
 pub struct Symbol {
     pub name: String,
     pub boundary: bounding::Rect,
+}
+
+impl Symbol {
+    fn construct(params: &LayoutParams, symbol: visual::Symbol) -> Self {
+        let boundary = params.font.measure(&symbol.0, params.symbol_font_size);
+        Self {
+            name: symbol.0,
+            boundary,
+        }
+    }
 }
 
 impl LayoutNode for Symbol {
@@ -45,6 +62,16 @@ impl LayoutNode for Symbol {
 pub struct Phrase {
     pub text: String,
     pub boundary: bounding::Rect,
+}
+
+impl Phrase {
+    fn construct(params: &LayoutParams, phrase: visual::Symbol) -> Self {
+        let boundary = params.font.measure(&phrase.0, params.phrase_font_size);
+        Self {
+            text: phrase.0,
+            boundary,
+        }
+    }
 }
 
 impl LayoutNode for Phrase {
