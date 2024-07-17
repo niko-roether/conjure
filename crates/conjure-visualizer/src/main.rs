@@ -1,11 +1,8 @@
 use std::f64;
 
 use bounding::ShapeMut;
-// use conjure::ast::{Action, Binding, Cast, Conjuration, Element, Manifest, Spell, Type, Value};
-use nalgebra::vector;
-// use visual::Figure;
-
 mod bounding;
+mod font;
 mod layout;
 mod visual;
 
