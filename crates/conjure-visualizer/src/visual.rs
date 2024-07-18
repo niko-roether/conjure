@@ -22,15 +22,15 @@ pub enum StrokePattern {
 pub struct Circle {
     pub stroke: StrokePattern,
     pub pattern: CirclePattern,
-    pub children: Vec<Figure>,
-    pub content: Option<Box<Figure>>,
+    pub rim: Vec<Figure>,
+    pub content: Box<Figure>,
 }
 
 #[derive(Debug, Clone)]
 pub struct RegularPolygon {
     pub sides: usize,
     pub stroke: StrokePattern,
-    pub content: Option<Box<Figure>>,
+    pub content: Box<Figure>,
 }
 
 #[derive(Debug, Clone)]
@@ -59,7 +59,7 @@ pub enum SpecialShapeKind {
 
 #[derive(Debug, Clone)]
 pub struct Pentagram {
-    pub content: Option<Box<Figure>>,
+    pub content: Box<Figure>,
 }
 
 #[derive(Debug, Clone)]
@@ -97,8 +97,8 @@ impl From<ast::Manifest> for Figure {
             content: Box::new(Figure::Circle(Circle {
                 stroke: StrokePattern::Line,
                 pattern: value.ty.into(),
-                children: vec![],
-                content: Some(Box::new(Figure::Symbol(Symbol(value.symbol)))),
+                rim: vec![],
+                content: Box::new(Figure::Symbol(Symbol(value.symbol))),
             })),
         })
     }
@@ -119,13 +119,13 @@ impl From<ast::Value> for Figure {
             ast::Value::Symbol(symbol) => Figure::Circle(Circle {
                 stroke: StrokePattern::Line,
                 pattern: CirclePattern::None,
-                children: vec![],
-                content: Some(Box::new(Figure::Symbol(Symbol(symbol)))),
+                rim: vec![],
+                content: Box::new(Figure::Symbol(Symbol(symbol))),
             }),
             ast::Value::Element(element) => Figure::RegularPolygon(RegularPolygon {
                 sides: 5,
                 stroke: StrokePattern::Line,
-                content: Some(Box::new(element.into())),
+                content: Box::new(element.into()),
             }),
             ast::Value::Spell(spell) => spell.into(),
             _ => todo!("Value type not yet supported!"),
@@ -140,10 +140,10 @@ impl From<ast::Action> for Figure {
             ast::Action::Cast(cast) => Figure::Circle(Circle {
                 stroke: StrokePattern::DoubleLine,
                 pattern: CirclePattern::None,
-                children: cast.components.into_iter().map(Into::into).collect(),
-                content: Some(Box::new(Figure::Pentagram(Pentagram {
-                    content: Some(Box::new((*cast.spell).into())),
-                }))),
+                rim: cast.components.into_iter().map(Into::into).collect(),
+                content: Box::new(Figure::Pentagram(Pentagram {
+                    content: Box::new((*cast.spell).into()),
+                })),
             }),
             _ => todo!("Action type not yet supported!"),
         }
@@ -166,8 +166,8 @@ impl From<ast::Spell> for Figure {
             content: Box::new(Figure::Circle(Circle {
                 stroke: StrokePattern::DoubleLine,
                 pattern: value.ty.into(),
-                children: value.components.into_iter().map(Into::into).collect(),
-                content: Some(Box::new(value.actions.into())),
+                rim: value.components.into_iter().map(Into::into).collect(),
+                content: Box::new(value.actions.into()),
             })),
         })
     }

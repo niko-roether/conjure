@@ -1,11 +1,11 @@
 use std::f64;
 
-use nalgebra::Vector2;
+use nalgebra::{vector, Vector2};
 
 use crate::{
     bounding::{self, OuterShape, ShapeMut},
     font::Font,
-    visual,
+    visual::{self, StrokePattern},
 };
 
 trait LayoutNode {
@@ -21,9 +21,15 @@ trait LayoutNode {
 }
 
 pub struct LayoutParams<'a> {
-    pub font: &'a Font,
-    pub padding: f64,
+    pub circle_padding: f64,
+    pub circle_thickness: f64,
+    pub circle_max_rim_overlap: f64,
+    pub circle_min_rim_size: f64,
+    pub circle_max_rim_size: f64,
+    pub polygon_padding: f64,
+    pub phrase_font: &'a Font,
     pub phrase_font_size: f32,
+    pub symbol_font: &'a Font,
     pub symbol_font_size: f32,
 }
 
@@ -34,7 +40,9 @@ pub struct Symbol {
 
 impl Symbol {
     fn construct(params: &LayoutParams, symbol: visual::Symbol) -> Self {
-        let boundary = params.font.measure(&symbol.0, params.symbol_font_size);
+        let boundary = params
+            .symbol_font
+            .measure(&symbol.0, params.symbol_font_size);
         Self {
             name: symbol.0,
             boundary,
@@ -69,7 +77,9 @@ pub struct Phrase {
 
 impl Phrase {
     fn construct(params: &LayoutParams, phrase: visual::Phrase) -> Self {
-        let boundary = params.font.measure(&phrase.0, params.phrase_font_size);
+        let boundary = params
+            .phrase_font
+            .measure(&phrase.0, params.phrase_font_size);
         Self {
             text: phrase.0,
             boundary,
@@ -99,7 +109,7 @@ impl LayoutNode for Phrase {
 
 pub struct Pentagram {
     pub boundary: bounding::RegularPolygon,
-    pub child: Option<Box<Node>>,
+    pub child: Box<Node>,
 }
 
 impl Pentagram {
@@ -108,25 +118,13 @@ impl Pentagram {
     const INNER_OUTER_RADIUS_RATIO: f64 = 2.618033988749895;
 
     fn construct(params: &LayoutParams, pentagram: visual::Pentagram) -> Self {
-        let inner_pentagon;
-        let child;
-        match pentagram.content {
-            Some(content_figure) => {
-                let content = Node::construct(params, *content_figure);
-                inner_pentagon = bounding::RegularPolygon::wrap(
-                    &content.boundary(),
-                    5,
-                    Self::INNER_ROTATION,
-                    params.padding,
-                );
-                child = Some(Box::new(content));
-            }
-            None => {
-                inner_pentagon =
-                    bounding::RegularPolygon::new(5, params.padding, Self::INNER_ROTATION);
-                child = None;
-            }
-        }
+        let child = Node::construct(params, *pentagram.content);
+        let inner_pentagon = bounding::RegularPolygon::wrap(
+            &child.boundary(),
+            5,
+            Self::INNER_ROTATION,
+            params.polygon_padding,
+        );
 
         let boundary = bounding::RegularPolygon::new(
             5,
@@ -134,7 +132,10 @@ impl Pentagram {
             Self::OUTER_ROTATION,
         );
 
-        Self { boundary, child }
+        Self {
+            boundary,
+            child: Box::new(child),
+        }
     }
 }
 
@@ -151,16 +152,12 @@ impl LayoutNode for Pentagram {
 
     fn rotate(&mut self, angle: f64) {
         self.boundary.rotate(angle);
-        if let Some(child) = &mut self.child {
-            child.rotate(angle)
-        }
+        self.child.rotate(angle);
     }
 
     fn translate(&mut self, amount: Vector2<f64>) {
         self.boundary.translate(amount);
-        if let Some(child) = &mut self.child {
-            child.translate(amount)
-        }
+        self.child.translate(amount);
     }
 }
 
@@ -169,7 +166,95 @@ pub struct Circle {
     pub pattern: visual::CirclePattern,
     pub boundary: bounding::Circle,
     pub rim: Vec<Node>,
-    pub content: Option<Box<Node>>,
+    pub content: Box<Node>,
+}
+
+struct RimNodeData {
+    node: Node,
+    boundary: Box<dyn OuterShape>,
+    outer_radius: f64,
+}
+
+impl Circle {
+    fn construct(params: &LayoutParams, circle: visual::Circle) -> Self {
+        let circle_thickness = match circle.stroke {
+            StrokePattern::DoubleLine => params.circle_thickness,
+            _ => 0.0,
+        };
+
+        let mut content = Node::construct(params, *circle.content);
+        let mut inner_circle = bounding::Circle::wrap(content.boundary(), params.circle_padding);
+
+        let mut rim_node_data: Vec<_> = circle
+            .rim
+            .into_iter()
+            .map(|f| {
+                let node = Node::construct(params, f);
+                let boundary = node.boundary();
+                let outer_radius = boundary.outer_radius();
+                RimNodeData {
+                    node,
+                    boundary,
+                    outer_radius,
+                }
+            })
+            .collect();
+        let num_rim_items = rim_node_data.len();
+
+        let highest_rim_size = rim_node_data
+            .iter()
+            .map(|d| d.outer_radius)
+            .fold(0.0, f64::max);
+
+        let max_rim_size = params.circle_max_rim_overlap * inner_circle.radius();
+        let min_content_size = max_rim_size * highest_rim_size;
+        if inner_circle.radius() < min_content_size {
+            let factor = min_content_size / inner_circle.radius();
+            content.scale(factor);
+            inner_circle.scale(factor);
+        }
+
+        let min_rim_size = params.circle_min_rim_size * inner_circle.radius();
+        for data in &mut rim_node_data {
+            if data.outer_radius < min_rim_size {
+                let factor = min_rim_size / data.outer_radius;
+                data.node.scale(factor);
+                data.boundary = Box::new(data.node.boundary());
+                data.outer_radius = data.boundary.outer_radius();
+            }
+        }
+
+        let max_rim_overlap = params.circle_max_rim_overlap * inner_circle.radius();
+        let rim_anchor_offset = 0.5 * circle_thickness;
+        let rim_anchor_radius = inner_circle.radius() + rim_anchor_offset;
+        for (i, data) in rim_node_data.iter_mut().enumerate() {
+            let angle = (i as f64) * f64::consts::TAU / (num_rim_items as f64);
+            let inward_radius = data
+                .boundary
+                .outer_radius_at(angle - 0.5 * f64::consts::TAU);
+            let initial_overlap = inward_radius - rim_anchor_offset;
+            let offset = f64::max(0.0, initial_overlap - max_rim_overlap);
+
+            let translation = (rim_anchor_radius + offset) * vector![angle.cos(), angle.sin()];
+            data.node.rotate(angle);
+            data.node.translate(translation);
+            data.boundary = data.node.boundary();
+            data.outer_radius = data.boundary.outer_radius();
+        }
+
+        let rim = rim_node_data.into_iter().map(|d| d.node).collect();
+        let outer_circle = bounding::Circle::new(
+            inner_circle.radius() + circle_thickness,
+            inner_circle.center(),
+        );
+        Self {
+            stroke: circle.stroke,
+            pattern: circle.pattern,
+            boundary: outer_circle,
+            content: Box::new(content),
+            rim,
+        }
+    }
 }
 
 impl LayoutNode for Circle {
@@ -178,24 +263,20 @@ impl LayoutNode for Circle {
     fn boundary(&self) -> Self::Boundary {
         let mut boundary: Vec<Box<dyn OuterShape>> = Vec::with_capacity(self.rim.len() + 1);
         boundary.push(Box::new(self.boundary.clone()));
-        boundary.extend(self.content.iter().map(|n| n.boundary()));
+        boundary.extend(self.rim.iter().map(|n| n.boundary()));
         boundary
     }
 
     fn translate(&mut self, amount: Vector2<f64>) {
         self.boundary.translate(amount);
+        self.content.translate(amount);
         self.rim.iter_mut().for_each(|n| n.translate(amount));
-        if let Some(content) = &mut self.content {
-            content.translate(amount)
-        }
     }
 
     fn rotate(&mut self, angle: f64) {
         self.boundary.rotate(angle);
         self.rim.iter_mut().for_each(|n| n.rotate(angle));
-        if let Some(content) = &mut self.content {
-            content.rotate(angle)
-        }
+        self.content.rotate(angle);
     }
 
     fn scale(&mut self, factor: f64) {
@@ -208,7 +289,7 @@ pub struct RegularPolygon {
     pub sides: usize,
     pub stroke: visual::StrokePattern,
     pub boundary: bounding::RegularPolygon,
-    pub child: Option<Box<Node>>,
+    pub child: Box<Node>,
 }
 
 impl LayoutNode for RegularPolygon {
@@ -220,23 +301,17 @@ impl LayoutNode for RegularPolygon {
 
     fn translate(&mut self, amount: Vector2<f64>) {
         self.boundary.translate(amount);
-        if let Some(child) = &mut self.child {
-            child.translate(amount);
-        }
+        self.child.translate(amount);
     }
 
     fn scale(&mut self, factor: f64) {
         self.boundary.scale(factor);
-        if let Some(child) = &mut self.child {
-            child.scale(factor);
-        }
+        self.child.scale(factor);
     }
 
     fn rotate(&mut self, angle: f64) {
         self.boundary.rotate(angle);
-        if let Some(child) = &mut self.child {
-            child.rotate(angle);
-        }
+        self.child.rotate(angle);
     }
 }
 
