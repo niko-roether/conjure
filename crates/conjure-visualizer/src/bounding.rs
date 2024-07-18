@@ -191,11 +191,11 @@ impl Circle {
     }
 
     pub fn wrap(shape: impl OuterShape, padding: f64) -> Self {
-        Self::from_radius(shape.outer_radius() + padding)
+        Self::from_radius(shape.outer_radius() * (1.0 + padding))
     }
 
     pub fn fill(shape: &impl InnerShape, padding: f64) -> Self {
-        Self::from_radius(f64::max(0.0, shape.inner_radius() - padding))
+        Self::from_radius(f64::max(0.0, shape.inner_radius() * (1.0 - padding)))
     }
 
     #[inline]
@@ -285,7 +285,10 @@ impl Rect {
         let (x_range, y_range) = shape.outer_coords_range();
         let width = 2.0 * f64::max(x_range.start.abs(), x_range.end.abs());
         let height = 2.0 * f64::max(y_range.start.abs(), y_range.end.abs());
-        Self::from_width_height(width + 2.0 * padding, height + 2.0 * padding)
+        Self::from_width_height(
+            width * (1.0 + 2.0 * padding),
+            height * (1.0 + 2.0 * padding),
+        )
     }
 
     pub fn wrap_rotated(shape: &impl OuterShape, rotation: f64, padding: f64) -> Self {
@@ -297,7 +300,11 @@ impl Rect {
             shape.outer_radius_at(rotation + f64::consts::TAU * 0.25),
             shape.outer_radius_at(rotation + f64::consts::TAU * 0.75),
         );
-        Self::from_width_height_rotation(width + 2.0 * padding, height + 2.0 * padding, rotation)
+        Self::from_width_height_rotation(
+            width * (1.0 + 2.0 * padding),
+            height * (1.0 + 2.0 * padding),
+            rotation,
+        )
     }
 
     pub fn fill(shape: &impl InnerShape, padding: f64) -> Self {
@@ -305,8 +312,8 @@ impl Rect {
         let width = 2.0 * f64::min(x_range.start.abs(), x_range.end.abs());
         let height = 2.0 * f64::min(y_range.start.abs(), y_range.end.abs());
         Self::from_width_height(
-            f64::max(0.0, width - 2.0 * padding),
-            f64::max(0.0, height - 2.0 * padding),
+            f64::max(0.0, width * (1.0 - 2.0 * padding)),
+            f64::max(0.0, height * (1.0 - 2.0 * padding)),
         )
     }
 
@@ -320,8 +327,8 @@ impl Rect {
             shape.inner_radius_at(rotation + f64::consts::TAU * 0.74),
         );
         Self::from_width_height_rotation(
-            f64::max(0.0, width - 2.0 * padding),
-            f64::max(0.0, height - 2.0 * padding),
+            f64::max(0.0, width * (1.0 - 2.0 * padding)),
+            f64::max(0.0, height * (1.0 - 2.0 * padding)),
             rotation,
         )
     }
@@ -436,7 +443,7 @@ impl RegularPolygon {
             })
             .reduce(f64::max)
             .unwrap_or_default();
-        let inner_radius = unpadded_inner_radius + padding;
+        let inner_radius = unpadded_inner_radius * (1.0 + padding);
         let outer_radius = inner_radius / f64::cos(segment_angle / 2.0);
         Self::new(num_sides, outer_radius, rotation)
     }
@@ -447,7 +454,7 @@ impl RegularPolygon {
             .map(|i| dbg!(shape.inner_radius_at(rotation + (i as f64) * segment_angle)))
             .reduce(f64::min)
             .unwrap_or_default();
-        Self::new(num_sides, unpadded_outer_radius + padding, rotation)
+        Self::new(num_sides, unpadded_outer_radius * (1.0 - padding), rotation)
     }
 
     #[inline]
