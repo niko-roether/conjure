@@ -5,7 +5,7 @@ use nalgebra::{vector, Vector2};
 use crate::{
     bounding::{self, OuterShape, ShapeMut},
     font::Font,
-    visual::{self, StrokePattern},
+    visual::{self},
 };
 
 trait LayoutNode {
@@ -20,7 +20,14 @@ trait LayoutNode {
     fn translate(&mut self, amount: Vector2<f64>);
 }
 
+#[derive(Debug)]
 pub struct LayoutParams<'a> {
+    pub emphasis_rays_radius_ratio: f64,
+    pub decoration_hat_relative_width: f64,
+    pub decoration_hat_relative_height: f64,
+    pub decoration_tilde_relative_width: f64,
+    pub decoration_tilde_relative_height: f64,
+    pub decoration_position_radius_ratio: f64,
     pub circle_content_scale: f64,
     pub double_stroke_radius_ratio: f64,
     pub circle_max_rim_overlap_ratio: f64,
@@ -169,6 +176,8 @@ pub struct Circle {
 }
 
 impl Circle {
+    const BASE_RIM_ROTATION: f64 = f64::consts::TAU * -0.25;
+
     fn construct(params: &LayoutParams, circle: visual::Circle) -> Self {
         let radius_ratio = Self::get_outer_radius_ratio(params, &circle);
         let mut content = Node::construct(params, *circle.content);
@@ -229,14 +238,15 @@ impl Circle {
         let num_rim_items = rim.len();
         let max_rim_overlap = params.circle_max_rim_overlap_ratio * inner_radius;
         for (i, rim_node) in rim.iter_mut().enumerate() {
-            let angle = (i as f64) * f64::consts::TAU / (num_rim_items as f64);
+            let orientation = (i as f64) * f64::consts::TAU / (num_rim_items as f64);
+            let angle = orientation + Self::BASE_RIM_ROTATION;
             let inward_radius = rim_node
                 .boundary()
                 .outer_radius_at(angle - 0.5 * f64::consts::TAU);
             let initial_overlap = mean_radius - inner_radius - inward_radius;
             let offset = f64::max(0.0, initial_overlap - max_rim_overlap);
             let translation = (mean_radius + offset) * vector![angle.cos(), angle.sin()];
-            rim_node.rotate(angle);
+            rim_node.rotate(orientation);
             rim_node.translate(translation);
         }
     }
@@ -291,6 +301,23 @@ pub struct RegularPolygon {
     pub child: Box<Node>,
 }
 
+impl RegularPolygon {
+    const BASE_ROTATION: f64 = f64::consts::TAU * -0.25;
+
+    fn construct(params: &LayoutParams, polygon: visual::RegularPolygon) -> Self {
+        let mut child = Node::construct(params, *polygon.content);
+        let boundary =
+            bounding::RegularPolygon::wrap(&child.boundary(), polygon.sides, Self::BASE_ROTATION);
+        child.scale(params.polygon_content_scale);
+        Self {
+            sides: polygon.sides,
+            stroke: polygon.stroke,
+            boundary,
+            child: Box::new(child),
+        }
+    }
+}
+
 impl LayoutNode for RegularPolygon {
     type Boundary = bounding::RegularPolygon;
 
@@ -314,32 +341,138 @@ impl LayoutNode for RegularPolygon {
     }
 }
 
-pub struct DecoratedItem {
+pub struct Decorated {
     pub kind: visual::DecorationKind,
-    pub decoration_box: bounding::Rect,
+    pub decoration_rect: bounding::Rect,
     pub child: Box<Node>,
 }
 
-impl LayoutNode for DecoratedItem {
+struct DecorationParams {
+    rect: bounding::Rect,
+    angle: f64,
+}
+
+impl Decorated {
+    fn construct(params: &LayoutParams, decorated: visual::Decorated) -> Self {
+        let child = Node::construct(params, *decorated.content);
+        let radius = child.boundary().outer_radius();
+        let decoration_rect = Self::position_decoration(params, radius, decorated.kind);
+
+        Self {
+            kind: decorated.kind,
+            decoration_rect,
+            child: Box::new(child),
+        }
+    }
+
+    fn position_decoration(
+        params: &LayoutParams,
+        radius: f64,
+        kind: visual::DecorationKind,
+    ) -> bounding::Rect {
+        let DecorationParams { mut rect, angle } = Self::get_deco_params(params, radius, kind);
+        let position_radius = params.decoration_position_radius_ratio * radius;
+
+        rect.translate(position_radius * vector![angle.cos(), angle.sin()]);
+        rect
+    }
+
+    fn get_deco_params(
+        params: &LayoutParams,
+        radius: f64,
+        kind: visual::DecorationKind,
+    ) -> DecorationParams {
+        match kind {
+            visual::DecorationKind::Hat => DecorationParams {
+                angle: f64::consts::TAU * -0.25,
+                rect: bounding::Rect::from_width_height(
+                    params.decoration_hat_relative_width * radius,
+                    params.decoration_hat_relative_height * radius,
+                ),
+            },
+            visual::DecorationKind::Tilde => DecorationParams {
+                angle: f64::consts::TAU * 0.25,
+                rect: bounding::Rect::from_width_height(
+                    params.decoration_tilde_relative_width * radius,
+                    params.decoration_tilde_relative_height * radius,
+                ),
+            },
+        }
+    }
+}
+
+impl LayoutNode for Decorated {
     type Boundary = Vec<Box<dyn OuterShape>>;
 
     fn boundary(&self) -> Self::Boundary {
-        vec![Box::new(self.decoration_box.clone()), self.child.boundary()]
+        vec![
+            Box::new(self.decoration_rect.clone()),
+            self.child.boundary(),
+        ]
     }
 
     fn translate(&mut self, amount: Vector2<f64>) {
-        self.decoration_box.translate(amount);
+        self.decoration_rect.translate(amount);
         self.child.translate(amount);
     }
 
     fn rotate(&mut self, angle: f64) {
-        self.decoration_box.rotate(angle);
+        self.decoration_rect.rotate(angle);
         self.child.rotate(angle);
     }
 
     fn scale(&mut self, factor: f64) {
-        self.decoration_box.scale(factor);
+        self.decoration_rect.scale(factor);
         self.child.scale(factor);
+    }
+}
+
+pub struct Emphasized {
+    pub kind: visual::EmphasisKind,
+    pub boundary: bounding::Circle,
+    pub child: Box<Node>,
+}
+
+impl Emphasized {
+    fn construct(params: &LayoutParams, emphasized: visual::Emphasized) -> Self {
+        let child = Node::construct(params, *emphasized.content);
+        let mut boundary = bounding::Circle::wrap(child.boundary());
+        boundary.scale(Self::get_radius_ratio(params, emphasized.kind));
+
+        Self {
+            kind: emphasized.kind,
+            boundary,
+            child: Box::new(child),
+        }
+    }
+
+    fn get_radius_ratio(params: &LayoutParams, kind: visual::EmphasisKind) -> f64 {
+        match kind {
+            visual::EmphasisKind::Rays => params.emphasis_rays_radius_ratio,
+        }
+    }
+}
+
+impl LayoutNode for Emphasized {
+    type Boundary = bounding::Circle;
+
+    fn boundary(&self) -> Self::Boundary {
+        self.boundary.clone()
+    }
+
+    fn translate(&mut self, amount: Vector2<f64>) {
+        self.boundary.translate(amount);
+        self.child.translate(amount);
+    }
+
+    fn rotate(&mut self, angle: f64) {
+        self.boundary.rotate(angle);
+        self.child.rotate(angle);
+    }
+
+    fn scale(&mut self, factor: f64) {
+        self.boundary.scale(factor);
+        self.child.scale(factor)
     }
 }
 

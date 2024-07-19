@@ -10,6 +10,7 @@ pub enum BuiltinFont {
     Zeyada,
 }
 
+#[derive(Debug)]
 pub struct Font(rusttype::Font<'static>);
 
 impl Font {

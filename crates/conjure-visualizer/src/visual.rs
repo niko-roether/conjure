@@ -43,7 +43,6 @@ pub struct Link {
 pub enum DecorationKind {
     Tilde,
     Hat,
-    Rays,
 }
 
 #[derive(Debug, Clone)]
@@ -53,8 +52,14 @@ pub struct Decorated {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SpecialShapeKind {
-    Pentagram,
+pub enum EmphasisKind {
+    Rays,
+}
+
+#[derive(Debug, Clone)]
+pub struct Emphasized {
+    pub kind: EmphasisKind,
+    pub content: Box<Figure>,
 }
 
 #[derive(Debug, Clone)]
@@ -76,6 +81,7 @@ pub enum Figure {
     Circle(Circle),
     RegularPolygon(RegularPolygon),
     Decorated(Decorated),
+    Emphasized(Emphasized),
     Link(Link),
     Arrangement(Vec<Figure>),
 }
@@ -164,8 +170,8 @@ impl From<ast::ActionSequence> for Figure {
 
 impl From<ast::Spell> for Figure {
     fn from(value: ast::Spell) -> Self {
-        Figure::Decorated(Decorated {
-            kind: DecorationKind::Rays,
+        Figure::Emphasized(Emphasized {
+            kind: EmphasisKind::Rays,
             content: Box::new(Figure::Circle(Circle {
                 stroke: StrokePattern::Line,
                 double: true,
