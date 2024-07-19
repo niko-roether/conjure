@@ -190,12 +190,12 @@ impl Circle {
         Self::new(radius, Vector2::zeros())
     }
 
-    pub fn wrap(shape: impl OuterShape, padding: f64) -> Self {
-        Self::from_radius(shape.outer_radius() * (1.0 + padding))
+    pub fn wrap(shape: impl OuterShape) -> Self {
+        Self::from_radius(shape.outer_radius())
     }
 
-    pub fn fill(shape: &impl InnerShape, padding: f64) -> Self {
-        Self::from_radius(f64::max(0.0, shape.inner_radius() * (1.0 - padding)))
+    pub fn fill(shape: &impl InnerShape) -> Self {
+        Self::from_radius(f64::max(0.0, shape.inner_radius()))
     }
 
     #[inline]
@@ -281,17 +281,14 @@ impl Rect {
         Self::from_width_height_rotation(width, height, 0.0)
     }
 
-    pub fn wrap(shape: &impl OuterShape, padding: f64) -> Self {
+    pub fn wrap(shape: &impl OuterShape) -> Self {
         let (x_range, y_range) = shape.outer_coords_range();
         let width = 2.0 * f64::max(x_range.start.abs(), x_range.end.abs());
         let height = 2.0 * f64::max(y_range.start.abs(), y_range.end.abs());
-        Self::from_width_height(
-            width * (1.0 + 2.0 * padding),
-            height * (1.0 + 2.0 * padding),
-        )
+        Self::from_width_height(width, height)
     }
 
-    pub fn wrap_rotated(shape: &impl OuterShape, rotation: f64, padding: f64) -> Self {
+    pub fn wrap_rotated(shape: &impl OuterShape, rotation: f64) -> Self {
         let width = f64::max(
             shape.outer_radius_at(rotation),
             shape.outer_radius_at(rotation + f64::consts::TAU * 0.5),
@@ -300,24 +297,17 @@ impl Rect {
             shape.outer_radius_at(rotation + f64::consts::TAU * 0.25),
             shape.outer_radius_at(rotation + f64::consts::TAU * 0.75),
         );
-        Self::from_width_height_rotation(
-            width * (1.0 + 2.0 * padding),
-            height * (1.0 + 2.0 * padding),
-            rotation,
-        )
+        Self::from_width_height_rotation(width, height, rotation)
     }
 
-    pub fn fill(shape: &impl InnerShape, padding: f64) -> Self {
+    pub fn fill(shape: &impl InnerShape) -> Self {
         let (x_range, y_range) = shape.inner_coords_range();
         let width = 2.0 * f64::min(x_range.start.abs(), x_range.end.abs());
         let height = 2.0 * f64::min(y_range.start.abs(), y_range.end.abs());
-        Self::from_width_height(
-            f64::max(0.0, width * (1.0 - 2.0 * padding)),
-            f64::max(0.0, height * (1.0 - 2.0 * padding)),
-        )
+        Self::from_width_height(f64::max(0.0, width), f64::max(0.0, height))
     }
 
-    pub fn fill_rotated(shape: &impl InnerShape, rotation: f64, padding: f64) -> Self {
+    pub fn fill_rotated(shape: &impl InnerShape, rotation: f64) -> Self {
         let width = f64::min(
             shape.inner_radius_at(rotation),
             shape.inner_radius_at(rotation + f64::consts::TAU * 0.5),
@@ -326,11 +316,7 @@ impl Rect {
             shape.inner_radius_at(rotation + f64::consts::TAU * 0.25),
             shape.inner_radius_at(rotation + f64::consts::TAU * 0.74),
         );
-        Self::from_width_height_rotation(
-            f64::max(0.0, width * (1.0 - 2.0 * padding)),
-            f64::max(0.0, height * (1.0 - 2.0 * padding)),
-            rotation,
-        )
+        Self::from_width_height_rotation(f64::max(0.0, width), f64::max(0.0, height), rotation)
     }
 
     #[inline]
@@ -435,7 +421,7 @@ impl RegularPolygon {
         }
     }
 
-    pub fn wrap(shape: &impl OuterShape, num_sides: usize, rotation: f64, padding: f64) -> Self {
+    pub fn wrap(shape: &impl OuterShape, num_sides: usize, rotation: f64) -> Self {
         let segment_angle = f64::consts::TAU / (num_sides as f64);
         let unpadded_inner_radius = (0..num_sides)
             .map(|i| {
@@ -443,18 +429,18 @@ impl RegularPolygon {
             })
             .reduce(f64::max)
             .unwrap_or_default();
-        let inner_radius = unpadded_inner_radius * (1.0 + padding);
+        let inner_radius = unpadded_inner_radius;
         let outer_radius = inner_radius / f64::cos(segment_angle / 2.0);
         Self::new(num_sides, outer_radius, rotation)
     }
 
-    pub fn fill(shape: &impl InnerShape, num_sides: usize, rotation: f64, padding: f64) -> Self {
+    pub fn fill(shape: &impl InnerShape, num_sides: usize, rotation: f64) -> Self {
         let segment_angle = f64::consts::TAU / (num_sides as f64);
         let unpadded_outer_radius = (0..num_sides)
             .map(|i| dbg!(shape.inner_radius_at(rotation + (i as f64) * segment_angle)))
             .reduce(f64::min)
             .unwrap_or_default();
-        Self::new(num_sides, unpadded_outer_radius * (1.0 - padding), rotation)
+        Self::new(num_sides, unpadded_outer_radius, rotation)
     }
 
     #[inline]

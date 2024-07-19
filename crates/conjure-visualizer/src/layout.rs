@@ -21,12 +21,12 @@ trait LayoutNode {
 }
 
 pub struct LayoutParams<'a> {
-    pub circle_padding: f64,
-    pub circle_thickness: f64,
-    pub circle_max_rim_overlap: f64,
-    pub circle_min_rim_size: f64,
-    pub circle_max_rim_size: f64,
-    pub polygon_padding: f64,
+    pub circle_content_scale: f64,
+    pub double_stroke_radius_ratio: f64,
+    pub circle_max_rim_overlap_ratio: f64,
+    pub circle_min_rim_ratio: f64,
+    pub circle_max_rim_ratio: f64,
+    pub polygon_content_scale: f64,
     pub phrase_font: &'a Font,
     pub phrase_font_size: f32,
     pub symbol_font: &'a Font,
@@ -118,19 +118,17 @@ impl Pentagram {
     const INNER_OUTER_RADIUS_RATIO: f64 = 2.618033988749895;
 
     fn construct(params: &LayoutParams, pentagram: visual::Pentagram) -> Self {
-        let child = Node::construct(params, *pentagram.content);
-        let inner_pentagon = bounding::RegularPolygon::wrap(
-            &child.boundary(),
-            5,
-            Self::INNER_ROTATION,
-            params.polygon_padding,
-        );
+        let mut child = Node::construct(params, *pentagram.content);
+        let inner_pentagon =
+            bounding::RegularPolygon::wrap(&child.boundary(), 5, Self::INNER_ROTATION);
 
         let boundary = bounding::RegularPolygon::new(
             5,
             Self::INNER_OUTER_RADIUS_RATIO * inner_pentagon.outer_radius(),
             Self::OUTER_ROTATION,
         );
+
+        child.scale(params.polygon_content_scale);
 
         Self {
             boundary,
@@ -164,95 +162,96 @@ impl LayoutNode for Pentagram {
 pub struct Circle {
     pub stroke: visual::StrokePattern,
     pub pattern: visual::CirclePattern,
+    pub double: bool,
     pub boundary: bounding::Circle,
     pub rim: Vec<Node>,
     pub content: Box<Node>,
 }
 
-struct RimNodeData {
-    node: Node,
-    boundary: Box<dyn OuterShape>,
-    outer_radius: f64,
-}
-
 impl Circle {
     fn construct(params: &LayoutParams, circle: visual::Circle) -> Self {
-        let circle_thickness = match circle.stroke {
-            StrokePattern::DoubleLine => params.circle_thickness,
-            _ => 0.0,
-        };
-
+        let radius_ratio = Self::get_outer_radius_ratio(params, &circle);
         let mut content = Node::construct(params, *circle.content);
-        let mut inner_circle = bounding::Circle::wrap(content.boundary(), params.circle_padding);
+        let mut rim = Self::get_rim_nodes(params, circle.rim);
 
-        let mut rim_node_data: Vec<_> = circle
-            .rim
-            .into_iter()
-            .map(|f| {
-                let node = Node::construct(params, f);
-                let boundary = node.boundary();
-                let outer_radius = boundary.outer_radius();
-                RimNodeData {
-                    node,
-                    boundary,
-                    outer_radius,
-                }
-            })
-            .collect();
-        let num_rim_items = rim_node_data.len();
+        Self::apply_content_constraints(params, &mut content, &rim);
 
-        let highest_rim_size = rim_node_data
-            .iter()
-            .map(|d| d.outer_radius)
-            .fold(0.0, f64::max);
+        let inner_circle = bounding::Circle::wrap(content.boundary());
+        let outer_radius = inner_circle.radius() * radius_ratio;
+        let mean_radius = (inner_circle.radius() + outer_radius) * 0.5;
 
-        let max_rim_size = params.circle_max_rim_overlap * inner_circle.radius();
-        let min_content_size = max_rim_size * highest_rim_size;
-        if inner_circle.radius() < min_content_size {
-            let factor = min_content_size / inner_circle.radius();
-            content.scale(factor);
-            inner_circle.scale(factor);
-        }
+        Self::apply_rim_constraints(params, &mut rim, mean_radius);
+        Self::position_rim_items(params, &mut rim, mean_radius, inner_circle.radius());
 
-        let min_rim_size = params.circle_min_rim_size * inner_circle.radius();
-        for data in &mut rim_node_data {
-            if data.outer_radius < min_rim_size {
-                let factor = min_rim_size / data.outer_radius;
-                data.node.scale(factor);
-                data.boundary = Box::new(data.node.boundary());
-                data.outer_radius = data.boundary.outer_radius();
-            }
-        }
+        content.scale(params.circle_content_scale);
 
-        let max_rim_overlap = params.circle_max_rim_overlap * inner_circle.radius();
-        let rim_anchor_offset = 0.5 * circle_thickness;
-        let rim_anchor_radius = inner_circle.radius() + rim_anchor_offset;
-        for (i, data) in rim_node_data.iter_mut().enumerate() {
-            let angle = (i as f64) * f64::consts::TAU / (num_rim_items as f64);
-            let inward_radius = data
-                .boundary
-                .outer_radius_at(angle - 0.5 * f64::consts::TAU);
-            let initial_overlap = inward_radius - rim_anchor_offset;
-            let offset = f64::max(0.0, initial_overlap - max_rim_overlap);
-
-            let translation = (rim_anchor_radius + offset) * vector![angle.cos(), angle.sin()];
-            data.node.rotate(angle);
-            data.node.translate(translation);
-            data.boundary = data.node.boundary();
-            data.outer_radius = data.boundary.outer_radius();
-        }
-
-        let rim = rim_node_data.into_iter().map(|d| d.node).collect();
-        let outer_circle = bounding::Circle::new(
-            inner_circle.radius() + circle_thickness,
-            inner_circle.center(),
-        );
         Self {
             stroke: circle.stroke,
             pattern: circle.pattern,
-            boundary: outer_circle,
-            content: Box::new(content),
+            double: circle.double,
+            boundary: bounding::Circle::from_radius(outer_radius),
             rim,
+            content: Box::new(content),
+        }
+    }
+
+    fn apply_content_constraints(params: &LayoutParams, content: &mut Node, rim: &[Node]) {
+        let highest_rim_size = rim
+            .iter()
+            .map(|n| n.boundary().outer_radius())
+            .fold(0.0, f64::max);
+
+        let min_content_size = highest_rim_size / params.circle_max_rim_ratio;
+        let content_radius = content.boundary().outer_radius();
+        if content_radius < min_content_size {
+            let factor = min_content_size / content_radius;
+            content.scale(factor);
+        }
+    }
+
+    fn apply_rim_constraints(params: &LayoutParams, rim: &mut [Node], mean_radius: f64) {
+        let min_rim_size = params.circle_min_rim_ratio * mean_radius;
+        for rim_node in rim {
+            let radius = rim_node.boundary().outer_radius();
+            if radius < min_rim_size {
+                let factor = min_rim_size / radius;
+                rim_node.scale(factor);
+            }
+        }
+    }
+
+    fn position_rim_items(
+        params: &LayoutParams,
+        rim: &mut [Node],
+        mean_radius: f64,
+        inner_radius: f64,
+    ) {
+        let num_rim_items = rim.len();
+        let max_rim_overlap = params.circle_max_rim_overlap_ratio * inner_radius;
+        for (i, rim_node) in rim.iter_mut().enumerate() {
+            let angle = (i as f64) * f64::consts::TAU / (num_rim_items as f64);
+            let inward_radius = rim_node
+                .boundary()
+                .outer_radius_at(angle - 0.5 * f64::consts::TAU);
+            let initial_overlap = mean_radius - inner_radius - inward_radius;
+            let offset = f64::max(0.0, initial_overlap - max_rim_overlap);
+            let translation = (mean_radius + offset) * vector![angle.cos(), angle.sin()];
+            rim_node.rotate(angle);
+            rim_node.translate(translation);
+        }
+    }
+
+    fn get_rim_nodes(params: &LayoutParams, rim: Vec<visual::Figure>) -> Vec<Node> {
+        rim.into_iter()
+            .map(|f| Node::construct(params, f))
+            .collect()
+    }
+
+    fn get_outer_radius_ratio(params: &LayoutParams, circle: &visual::Circle) -> f64 {
+        if circle.double {
+            params.double_stroke_radius_ratio
+        } else {
+            1.0
         }
     }
 }

@@ -14,7 +14,6 @@ pub enum CirclePattern {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StrokePattern {
     Line,
-    DoubleLine,
     Chain,
 }
 
@@ -22,6 +21,7 @@ pub enum StrokePattern {
 pub struct Circle {
     pub stroke: StrokePattern,
     pub pattern: CirclePattern,
+    pub double: bool,
     pub rim: Vec<Figure>,
     pub content: Box<Figure>,
 }
@@ -96,6 +96,7 @@ impl From<ast::Manifest> for Figure {
             kind: DecorationKind::Hat,
             content: Box::new(Figure::Circle(Circle {
                 stroke: StrokePattern::Line,
+                double: false,
                 pattern: value.ty.into(),
                 rim: vec![],
                 content: Box::new(Figure::Symbol(Symbol(value.symbol))),
@@ -118,6 +119,7 @@ impl From<ast::Value> for Figure {
         match value {
             ast::Value::Symbol(symbol) => Figure::Circle(Circle {
                 stroke: StrokePattern::Line,
+                double: false,
                 pattern: CirclePattern::None,
                 rim: vec![],
                 content: Box::new(Figure::Symbol(Symbol(symbol))),
@@ -138,7 +140,8 @@ impl From<ast::Action> for Figure {
         match value {
             ast::Action::Value(value) => value.into(),
             ast::Action::Cast(cast) => Figure::Circle(Circle {
-                stroke: StrokePattern::DoubleLine,
+                stroke: StrokePattern::Line,
+                double: true,
                 pattern: CirclePattern::None,
                 rim: cast.components.into_iter().map(Into::into).collect(),
                 content: Box::new(Figure::Pentagram(Pentagram {
@@ -164,7 +167,8 @@ impl From<ast::Spell> for Figure {
         Figure::Decorated(Decorated {
             kind: DecorationKind::Rays,
             content: Box::new(Figure::Circle(Circle {
-                stroke: StrokePattern::DoubleLine,
+                stroke: StrokePattern::Line,
+                double: true,
                 pattern: value.ty.into(),
                 rim: value.components.into_iter().map(Into::into).collect(),
                 content: Box::new(value.actions.into()),
