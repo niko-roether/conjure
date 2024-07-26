@@ -478,26 +478,53 @@ impl LayoutNode for Emphasized {
 
 pub struct Link {
     pub stroke: visual::StrokePattern,
-    pub boundary: bounding::Line,
+    pub segments: Vec<bounding::Line>,
+    pub items: Vec<Node>,
+}
+
+impl Link {
+    const BASE_ANGLE: f64 = f64::consts::TAU * -0.25;
+
+    fn construct(params: &LayoutParams, link: visual::Link) -> Self {
+        let mut items: Vec<Node> = Vec::with_capacity(link.items.len());
+        let mut segments: Vec<bounding::Line> = Vec::with_capacity(link.items.len() - 1);
+
+        let num_sides: f64 = link.items.len() as f64;
+        let start_angle = Self::BASE_ANGLE + 0.5 * (num_sides - 1.0) / num_sides * f64::consts::TAU;
+
+        let mut prev_position: Option<Vector2<f64>>;
+        for i in 0..link.items.len() {
+            let angle = start_angle + i as f64 / num_sides * f64::consts::TAU;
+        }
+
+        todo!()
+    }
 }
 
 impl LayoutNode for Link {
-    type Boundary = bounding::Line;
+    type Boundary = Vec<Box<dyn OuterShape>>;
 
     fn boundary(&self) -> Self::Boundary {
-        self.boundary.clone()
+        self.segments
+            .iter()
+            .map(|s| Box::new(s.clone()) as Box<dyn OuterShape>)
+            .chain(self.items.iter().map(|i| i.boundary()))
+            .collect()
     }
 
     fn translate(&mut self, amount: Vector2<f64>) {
-        self.boundary.translate(amount);
+        self.segments.iter_mut().for_each(|s| s.translate(amount));
+        self.items.iter_mut().for_each(|i| i.translate(amount));
     }
 
     fn rotate(&mut self, angle: f64) {
-        self.boundary.rotate(angle);
+        self.segments.iter_mut().for_each(|s| s.rotate(angle));
+        self.items.iter_mut().for_each(|i| i.rotate(angle));
     }
 
     fn scale(&mut self, factor: f64) {
-        self.boundary.scale(factor);
+        self.segments.iter_mut().for_each(|s| s.scale(factor));
+        self.items.iter_mut().for_each(|i| i.scale(factor));
     }
 }
 
