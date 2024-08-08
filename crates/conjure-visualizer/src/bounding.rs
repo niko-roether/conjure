@@ -2,29 +2,22 @@ use std::{f64, ops::Range};
 
 use nalgebra::{vector, Rotation2, Vector2};
 
-pub trait OuterShape {
-    fn outer_coords_range(&self) -> (Range<f64>, Range<f64>);
+pub trait ConvexHull {
+    fn convex_coords_range(&self) -> (Range<f64>, Range<f64>);
 
-    fn outer_radius(&self) -> f64;
+    fn convex_radius(&self) -> f64;
 
-    fn outer_radius_at(&self, angle: f64) -> f64;
+    fn convex_radius_at(&self, angle: f64) -> f64;
 }
 
-pub trait InnerShape {
-    fn inner_coords_range(&self) -> (Range<f64>, Range<f64>);
-
-    fn inner_radius(&self) -> f64;
-
-    fn inner_radius_at(&self, angle: f64) -> f64;
-}
-
-pub trait ShapeMut {
+pub trait TransformShape {
     fn translate(&mut self, amount: Vector2<f64>);
 
     fn rotate(&mut self, angle: f64);
 
     fn scale(&mut self, factor: f64);
 }
+
 fn vector_to_line(from: Vector2<f64>, to: Vector2<f64>) -> Vector2<f64> {
     let diff = to - from;
     let factor = (from.magnitude_squared() - from.dot(&to)) / diff.magnitude_squared();
@@ -37,19 +30,19 @@ pub struct Line {
     pub end: Vector2<f64>,
 }
 
-impl OuterShape for Line {
-    fn outer_coords_range(&self) -> (Range<f64>, Range<f64>) {
+impl ConvexHull for Line {
+    fn convex_coords_range(&self) -> (Range<f64>, Range<f64>) {
         (
             f64::min(self.start.x, self.end.x)..f64::max(self.start.x, self.end.x),
             f64::min(self.start.y, self.end.y)..f64::min(self.start.y, self.end.y),
         )
     }
 
-    fn outer_radius(&self) -> f64 {
+    fn convex_radius(&self) -> f64 {
         f64::max(self.start.magnitude_squared(), self.end.magnitude_squared()).sqrt()
     }
 
-    fn outer_radius_at(&self, _angle: f64) -> f64 {
+    fn convex_radius_at(&self, _angle: f64) -> f64 {
         f64::max(
             0.0,
             vector_to_line(self.start, self.end).magnitude_squared(),
@@ -58,7 +51,7 @@ impl OuterShape for Line {
     }
 }
 
-impl ShapeMut for Line {
+impl TransformShape for Line {
     fn scale(&mut self, factor: f64) {
         self.start *= factor;
         self.end *= factor;
@@ -121,8 +114,8 @@ pub trait Polygon {
     }
 }
 
-impl<P: Polygon> OuterShape for P {
-    fn outer_coords_range(&self) -> (Range<f64>, Range<f64>) {
+impl<P: Polygon> ConvexHull for P {
+    fn convex_coords_range(&self) -> (Range<f64>, Range<f64>) {
         let mut x_range = 0.0..0.0;
         let mut y_range = 0.0..0.0;
         for vertex in self.vertices() {
@@ -132,43 +125,16 @@ impl<P: Polygon> OuterShape for P {
         (x_range, y_range)
     }
 
-    fn outer_radius(&self) -> f64 {
+    fn convex_radius(&self) -> f64 {
         self.vertices()
             .map(|v| v.magnitude_squared())
             .fold(0.0, f64::max)
             .sqrt()
     }
 
-    fn outer_radius_at(&self, angle: f64) -> f64 {
+    fn convex_radius_at(&self, angle: f64) -> f64 {
         let normal = vector![angle.cos(), angle.sin()];
         self.vertices().map(|v| v.dot(&normal)).fold(0.0, f64::max)
-    }
-}
-
-impl<P: Polygon> InnerShape for P {
-    fn inner_coords_range(&self) -> (Range<f64>, Range<f64>) {
-        let mut x_range = f64::NEG_INFINITY..f64::INFINITY;
-        let mut y_range = f64::NEG_INFINITY..f64::INFINITY;
-        for to_side in self.sides() {
-            x_range = f64::max(x_range.start, to_side.x)..f64::min(x_range.end, to_side.x);
-            y_range = f64::max(y_range.start, to_side.y)..f64::min(y_range.end, to_side.y);
-        }
-        (x_range, y_range)
-    }
-
-    fn inner_radius(&self) -> f64 {
-        self.sides()
-            .map(|s| s.magnitude_squared())
-            .fold(f64::INFINITY, f64::min)
-            .sqrt()
-    }
-
-    fn inner_radius_at(&self, angle: f64) -> f64 {
-        let normal = vector![angle.cos(), angle.sin()];
-        self.sides()
-            .map(|s| s.magnitude_squared() / s.dot(&normal))
-            .filter(|d| *d >= 0.0)
-            .fold(f64::INFINITY, f64::min)
     }
 }
 
@@ -190,12 +156,8 @@ impl Circle {
         Self::new(radius, Vector2::zeros())
     }
 
-    pub fn wrap(shape: impl OuterShape) -> Self {
-        Self::from_radius(shape.outer_radius())
-    }
-
-    pub fn fill(shape: &impl InnerShape) -> Self {
-        Self::from_radius(f64::max(0.0, shape.inner_radius()))
+    pub fn wrap(shape: impl ConvexHull) -> Self {
+        Self::from_radius(shape.convex_radius())
     }
 
     #[inline]
@@ -209,38 +171,24 @@ impl Circle {
     }
 }
 
-impl OuterShape for Circle {
-    fn outer_coords_range(&self) -> (Range<f64>, Range<f64>) {
+impl ConvexHull for Circle {
+    fn convex_coords_range(&self) -> (Range<f64>, Range<f64>) {
         (
             self.offset.x - self.radius..self.offset.x + self.radius,
             self.offset.y - self.radius..self.offset.y + self.radius,
         )
     }
 
-    fn outer_radius(&self) -> f64 {
+    fn convex_radius(&self) -> f64 {
         self.radius + self.offset.magnitude()
     }
 
-    fn outer_radius_at(&self, angle: f64) -> f64 {
+    fn convex_radius_at(&self, angle: f64) -> f64 {
         self.offset.x * angle.cos() + self.offset.y * angle.sin() + self.radius
     }
 }
 
-impl InnerShape for Circle {
-    fn inner_coords_range(&self) -> (Range<f64>, Range<f64>) {
-        (-self.radius..self.radius, -self.radius..self.radius)
-    }
-
-    fn inner_radius(&self) -> f64 {
-        self.radius
-    }
-
-    fn inner_radius_at(&self, _angle: f64) -> f64 {
-        self.radius
-    }
-}
-
-impl ShapeMut for Circle {
+impl TransformShape for Circle {
     fn translate(&mut self, amount: Vector2<f64>) {
         self.offset += amount;
     }
@@ -281,42 +229,23 @@ impl Rect {
         Self::from_width_height_rotation(width, height, 0.0)
     }
 
-    pub fn wrap(shape: &impl OuterShape) -> Self {
-        let (x_range, y_range) = shape.outer_coords_range();
+    pub fn wrap(shape: &impl ConvexHull) -> Self {
+        let (x_range, y_range) = shape.convex_coords_range();
         let width = 2.0 * f64::max(x_range.start.abs(), x_range.end.abs());
         let height = 2.0 * f64::max(y_range.start.abs(), y_range.end.abs());
         Self::from_width_height(width, height)
     }
 
-    pub fn wrap_rotated(shape: &impl OuterShape, rotation: f64) -> Self {
+    pub fn wrap_rotated(shape: &impl ConvexHull, rotation: f64) -> Self {
         let width = f64::max(
-            shape.outer_radius_at(rotation),
-            shape.outer_radius_at(rotation + f64::consts::TAU * 0.5),
+            shape.convex_radius_at(rotation),
+            shape.convex_radius_at(rotation + f64::consts::TAU * 0.5),
         );
         let height = f64::max(
-            shape.outer_radius_at(rotation + f64::consts::TAU * 0.25),
-            shape.outer_radius_at(rotation + f64::consts::TAU * 0.75),
+            shape.convex_radius_at(rotation + f64::consts::TAU * 0.25),
+            shape.convex_radius_at(rotation + f64::consts::TAU * 0.75),
         );
         Self::from_width_height_rotation(width, height, rotation)
-    }
-
-    pub fn fill(shape: &impl InnerShape) -> Self {
-        let (x_range, y_range) = shape.inner_coords_range();
-        let width = 2.0 * f64::min(x_range.start.abs(), x_range.end.abs());
-        let height = 2.0 * f64::min(y_range.start.abs(), y_range.end.abs());
-        Self::from_width_height(f64::max(0.0, width), f64::max(0.0, height))
-    }
-
-    pub fn fill_rotated(shape: &impl InnerShape, rotation: f64) -> Self {
-        let width = f64::min(
-            shape.inner_radius_at(rotation),
-            shape.inner_radius_at(rotation + f64::consts::TAU * 0.5),
-        );
-        let height = f64::min(
-            shape.inner_radius_at(rotation + f64::consts::TAU * 0.25),
-            shape.inner_radius_at(rotation + f64::consts::TAU * 0.74),
-        );
-        Self::from_width_height_rotation(f64::max(0.0, width), f64::max(0.0, height), rotation)
     }
 
     #[inline]
@@ -386,7 +315,7 @@ impl Polygon for Rect {
     }
 }
 
-impl ShapeMut for Rect {
+impl TransformShape for Rect {
     fn translate(&mut self, amount: Vector2<f64>) {
         self.offset += amount;
     }
@@ -421,26 +350,17 @@ impl RegularPolygon {
         }
     }
 
-    pub fn wrap(shape: &impl OuterShape, num_sides: usize, rotation: f64) -> Self {
+    pub fn wrap(shape: &impl ConvexHull, num_sides: usize, rotation: f64) -> Self {
         let segment_angle = f64::consts::TAU / (num_sides as f64);
         let unpadded_inner_radius = (0..num_sides)
             .map(|i| {
-                shape.outer_radius_at(rotation + segment_angle / 2.0 + (i as f64) * segment_angle)
+                shape.convex_radius_at(rotation + segment_angle / 2.0 + (i as f64) * segment_angle)
             })
             .reduce(f64::max)
             .unwrap_or_default();
         let inner_radius = unpadded_inner_radius;
         let outer_radius = inner_radius / f64::cos(segment_angle / 2.0);
         Self::new(num_sides, outer_radius, rotation)
-    }
-
-    pub fn fill(shape: &impl InnerShape, num_sides: usize, rotation: f64) -> Self {
-        let segment_angle = f64::consts::TAU / (num_sides as f64);
-        let unpadded_outer_radius = (0..num_sides)
-            .map(|i| dbg!(shape.inner_radius_at(rotation + (i as f64) * segment_angle)))
-            .reduce(f64::min)
-            .unwrap_or_default();
-        Self::new(num_sides, unpadded_outer_radius, rotation)
     }
 
     #[inline]
@@ -494,7 +414,7 @@ impl Polygon for RegularPolygon {
     }
 }
 
-impl ShapeMut for RegularPolygon {
+impl TransformShape for RegularPolygon {
     fn translate(&mut self, amount: Vector2<f64>) {
         self.offset += amount;
     }
@@ -510,26 +430,26 @@ impl ShapeMut for RegularPolygon {
     }
 }
 
-impl OuterShape for Box<dyn OuterShape> {
-    fn outer_coords_range(&self) -> (Range<f64>, Range<f64>) {
-        self.outer_coords_range()
+impl ConvexHull for Box<dyn ConvexHull> {
+    fn convex_coords_range(&self) -> (Range<f64>, Range<f64>) {
+        (**self).convex_coords_range()
     }
 
-    fn outer_radius(&self) -> f64 {
-        self.outer_radius()
+    fn convex_radius(&self) -> f64 {
+        (**self).convex_radius()
     }
 
-    fn outer_radius_at(&self, angle: f64) -> f64 {
-        self.outer_radius_at(angle)
+    fn convex_radius_at(&self, angle: f64) -> f64 {
+        (**self).convex_radius_at(angle)
     }
 }
 
-impl<S: OuterShape> OuterShape for Vec<S> {
-    fn outer_coords_range(&self) -> (Range<f64>, Range<f64>) {
+impl<S: ConvexHull> ConvexHull for Vec<S> {
+    fn convex_coords_range(&self) -> (Range<f64>, Range<f64>) {
         let mut x_range = 0.0..0.0;
         let mut y_range = 0.0..0.0;
         for shape in self {
-            let (shape_x_range, shape_y_range) = shape.outer_coords_range();
+            let (shape_x_range, shape_y_range) = shape.convex_coords_range();
             x_range = f64::min(x_range.start, shape_x_range.start)
                 ..f64::max(x_range.end, shape_x_range.end);
             y_range = f64::min(y_range.start, shape_y_range.start)
@@ -538,13 +458,13 @@ impl<S: OuterShape> OuterShape for Vec<S> {
         (x_range, y_range)
     }
 
-    fn outer_radius(&self) -> f64 {
-        self.iter().map(|s| s.outer_radius()).fold(0.0, f64::max)
+    fn convex_radius(&self) -> f64 {
+        self.iter().map(|s| s.convex_radius()).fold(0.0, f64::max)
     }
 
-    fn outer_radius_at(&self, angle: f64) -> f64 {
+    fn convex_radius_at(&self, angle: f64) -> f64 {
         self.iter()
-            .map(|s| s.outer_radius_at(angle))
+            .map(|s| s.convex_radius_at(angle))
             .fold(0.0, f64::max)
     }
 }

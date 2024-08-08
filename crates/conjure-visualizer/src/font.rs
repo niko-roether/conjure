@@ -1,7 +1,7 @@
 use anyhow::Context;
 use nalgebra::vector;
 
-use crate::bounding::{self, ShapeMut};
+use crate::bounding::{self, TransformShape};
 
 const ZEYADA_REGULAR: &[u8] = include_bytes!("../assets/Zeyada-Regular.ttf");
 

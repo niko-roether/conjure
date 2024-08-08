@@ -3,13 +3,13 @@ use std::f64;
 use nalgebra::{vector, Vector2};
 
 use crate::{
-    bounding::{self, OuterShape, ShapeMut},
+    bounding::{self, ConvexHull, TransformShape},
     font::Font,
     visual::{self},
 };
 
 trait LayoutNode {
-    type Boundary: OuterShape;
+    type Boundary: ConvexHull;
 
     fn boundary(&self) -> Self::Boundary;
 
@@ -131,7 +131,7 @@ impl Pentagram {
 
         let boundary = bounding::RegularPolygon::new(
             5,
-            Self::INNER_OUTER_RADIUS_RATIO * inner_pentagon.outer_radius(),
+            Self::INNER_OUTER_RADIUS_RATIO * inner_pentagon.convex_radius(),
             Self::OUTER_ROTATION,
         );
 
@@ -207,11 +207,11 @@ impl Circle {
     fn apply_content_constraints(params: &LayoutParams, content: &mut Node, rim: &[Node]) {
         let highest_rim_size = rim
             .iter()
-            .map(|n| n.boundary().outer_radius())
+            .map(|n| n.boundary().convex_radius())
             .fold(0.0, f64::max);
 
         let min_content_size = highest_rim_size / params.circle_max_rim_ratio;
-        let content_radius = content.boundary().outer_radius();
+        let content_radius = content.boundary().convex_radius();
         if content_radius < min_content_size {
             let factor = min_content_size / content_radius;
             content.scale(factor);
@@ -221,7 +221,7 @@ impl Circle {
     fn apply_rim_constraints(params: &LayoutParams, rim: &mut [Node], mean_radius: f64) {
         let min_rim_size = params.circle_min_rim_ratio * mean_radius;
         for rim_node in rim {
-            let radius = rim_node.boundary().outer_radius();
+            let radius = rim_node.boundary().convex_radius();
             if radius < min_rim_size {
                 let factor = min_rim_size / radius;
                 rim_node.scale(factor);
@@ -242,7 +242,7 @@ impl Circle {
             let angle = orientation + Self::BASE_RIM_ROTATION;
             let inward_radius = rim_node
                 .boundary()
-                .outer_radius_at(angle - 0.5 * f64::consts::TAU);
+                .convex_radius_at(angle - 0.5 * f64::consts::TAU);
             let initial_overlap = mean_radius - inner_radius - inward_radius;
             let offset = f64::max(0.0, initial_overlap - max_rim_overlap);
             let translation = (mean_radius + offset) * vector![angle.cos(), angle.sin()];
@@ -267,10 +267,10 @@ impl Circle {
 }
 
 impl LayoutNode for Circle {
-    type Boundary = Vec<Box<dyn OuterShape>>;
+    type Boundary = Vec<Box<dyn ConvexHull>>;
 
     fn boundary(&self) -> Self::Boundary {
-        let mut boundary: Vec<Box<dyn OuterShape>> = Vec::with_capacity(self.rim.len() + 1);
+        let mut boundary: Vec<Box<dyn ConvexHull>> = Vec::with_capacity(self.rim.len() + 1);
         boundary.push(Box::new(self.boundary.clone()));
         boundary.extend(self.rim.iter().map(|n| n.boundary()));
         boundary
@@ -355,7 +355,7 @@ struct DecorationParams {
 impl Decorated {
     fn construct(params: &LayoutParams, decorated: visual::Decorated) -> Self {
         let child = Node::construct(params, *decorated.content);
-        let radius = child.boundary().outer_radius();
+        let radius = child.boundary().convex_radius();
         let decoration_rect = Self::position_decoration(params, radius, decorated.kind);
 
         Self {
@@ -402,7 +402,7 @@ impl Decorated {
 }
 
 impl LayoutNode for Decorated {
-    type Boundary = Vec<Box<dyn OuterShape>>;
+    type Boundary = Vec<Box<dyn ConvexHull>>;
 
     fn boundary(&self) -> Self::Boundary {
         vec![
@@ -494,6 +494,7 @@ impl Link {
 
         let mut prev_position: Option<Vector2<f64>>;
         for i in 0..link.items.len() {
+            let node = Node::construct(params, link.items[i].clone());
             let angle = start_angle + i as f64 / num_sides * f64::consts::TAU;
         }
 
@@ -502,12 +503,12 @@ impl Link {
 }
 
 impl LayoutNode for Link {
-    type Boundary = Vec<Box<dyn OuterShape>>;
+    type Boundary = Vec<Box<dyn ConvexHull>>;
 
     fn boundary(&self) -> Self::Boundary {
         self.segments
             .iter()
-            .map(|s| Box::new(s.clone()) as Box<dyn OuterShape>)
+            .map(|s| Box::new(s.clone()) as Box<dyn ConvexHull>)
             .chain(self.items.iter().map(|i| i.boundary()))
             .collect()
     }
@@ -529,7 +530,7 @@ impl LayoutNode for Link {
 }
 
 impl LayoutNode for Vec<Node> {
-    type Boundary = Vec<Box<dyn OuterShape>>;
+    type Boundary = Vec<Box<dyn ConvexHull>>;
 
     fn boundary(&self) -> Self::Boundary {
         self.iter().map(|n| n.boundary()).collect::<Vec<_>>()
@@ -565,7 +566,7 @@ impl Node {
 }
 
 impl LayoutNode for Node {
-    type Boundary = Box<dyn OuterShape>;
+    type Boundary = Box<dyn ConvexHull>;
 
     fn boundary(&self) -> Self::Boundary {
         match self {
